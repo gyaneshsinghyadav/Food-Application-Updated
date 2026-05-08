@@ -29,32 +29,34 @@ const signup = async (req, res) => {
 
         // Hash password
         const hashedPassword = await bcrypt.hash(password, 10);
-        await TempUser.deleteOne({ email });
-        // Generate OTP & Expiry
-        const verificationToken = generateVerificationCode(); // e.g., 6-digit code
-        const verificationTokenExpiresAt = Date.now() + 5 * 60 * 1000; // 10 min expiry
 
-        // Store user details temporarily in Redis
-        await TempUser.create({
+        // Directly create verified user to skip OTP step
+        const newUser = await User.create({
             email,
             password: hashedPassword,
-            verificationToken,
-            verificationTokenExpiresAt
+            isVerified: true
         });
 
-        // Send OTP Email
+        // Send welcome email (optional, ignoring errors)
         try {
-            await sendVerificationEmail(email, verificationToken);
-            return res.status(200).json({
-                success: true,
-                message: "Verification email sent. Please check your inbox."
-            });
-        } catch (emailError) {
-            return res.status(500).json({
-                success: false,
-                message: "Failed to send verification email"
-            });
+            await sendWelcomeEmail(newUser.email, newUser.fullname || "User");
+        } catch (e) {
+            console.log("Welcome email failed but ignoring", e);
         }
+
+        generateToken(res, newUser);
+
+        const userWithoutPassword = {
+            _id: newUser._id,
+            email: newUser.email,
+            isVerified: newUser.isVerified
+        };
+
+        return res.status(200).json({
+            success: true,
+            message: "Account created successfully.",
+            user: userWithoutPassword
+        });
 
     } catch (error) {
         console.error("Signup Error:", error);
@@ -248,7 +250,7 @@ const resetPassword = async (req, res) => {
 
 const checkAuth = async (req, res) => {
     try {
-        const userId = req.id;
+        const userId = req.user;
         const user = await User.findById(userId).select("-password");
         if (!user) {
             return res.status(404).json({

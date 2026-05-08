@@ -1,5 +1,6 @@
 const express = require('express');
 const dotenv = require('dotenv');
+dotenv.config();
 const mongoDB = require('./connectDb');
 const cookieParser = require('cookie-parser');
 const cors = require('cors');
@@ -14,8 +15,6 @@ const chatRoutes = require('./routes/chatRoutes');
 const jwt = require('jsonwebtoken');
 const routes = require('./routes/index.js');
 const Information = require('./models/UserInformation.js');
-
-dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
@@ -41,20 +40,27 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// API Routes
-app.use('/api', routes);
-app.use('/chat', chatRoutes);
-app.use('/api/v1/user', userRoute);
-app.use('/api/v1/profile', userPersonalDetails);
-app.use('/api/v1/posts', postRoute);
+// Add a simple health check endpoint
+app.get('/api/health', async (req, res) => {
+  try {
+    // Check if Ollama is running
+    const response = await fetch(`${process.env.OLLAMA_URL || 'http://127.0.0.1:11434'}/api/tags`);
+    const isOllamaUp = response.ok;
+    res.status(200).json({ status: 'ok', ollamaAvailable: isOllamaUp });
+  } catch (error) {
+    res.status(200).json({ status: 'ok', ollamaAvailable: false, error: error.message });
+  }
+});
 
-
-// Scanning 
+// Middleware to inject user profile information if available
 app.use(async (req, res, next) => {
   if (req.user) {
     const u = await Information.findOne({ authId: req.user }).lean();
-    if (!u) return res.status(404).json({ error: 'User not found' });
-    console.log('[Middleware] User profile loaded:', u);
+    if (!u) {
+      console.log('[Middleware] No additional user info found for:', req.user);
+      return next(); 
+    }
+    console.log('[Middleware] User profile loaded:', u.fullName);
     req.userInfo = {
       fullName:       u.fullName,
       dob:            u.dateOfBirth,
@@ -70,6 +76,16 @@ app.use(async (req, res, next) => {
   }
   next();
 });
+
+// API Routes
+app.use('/api', routes);
+app.use('/chat', chatRoutes);
+app.use('/api/v1/user', userRoute);
+app.use('/api/v1/profile', userPersonalDetails);
+app.use('/api/v1/posts', postRoute);
+
+
+// Scanning routes are already defined in routes aggregator
 
 
 // Start server

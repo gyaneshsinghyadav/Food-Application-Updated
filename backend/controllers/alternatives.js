@@ -1,7 +1,5 @@
 const axios = require('axios');
-const { GoogleGenAI } = require('@google/genai');
-
-const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY });
+const { generateText, extractJSON } = require('../utils/aiService.js');
 
 // Fetch top-rated Amazon product for a query
 async function fetchTopAmazonProduct(query) {
@@ -66,28 +64,18 @@ async function fetchTopYouTubeRecipe(query) {
   }
 }
 
-// Fetch alternatives from Gemini API
-async function fetchGeminiAlternatives(query) {
+// Fetch alternatives using local AI (Ollama)
+async function fetchAlternatives(query) {
   try {
-    const model = ai.getGenerativeModel({ model: 'gemini-2.0-flash' });
-    
-    const prompt = `
-You are a health and diet assistant with expertise in recommending healthy alternatives.
-Suggest 4 healthy alternatives to "${query}" that are nutritious and suitable for a balanced diet.
-Focus on options that are lower in calories, higher in nutrients, or better for specific dietary needs.
-Return only a JSON array like:
-["Alternative 1", "Alternative 2", "Alternative 3", "Alternative 4"]
-No other text.`;
+    const prompt =
+      `You are a health and diet assistant. ` +
+      `Suggest 4 healthy alternatives to "${query}" that are nutritious and suitable for a balanced diet. ` +
+      `Focus on options that are lower in calories, higher in nutrients, or better for specific dietary needs. ` +
+      `Return ONLY a JSON array like: ["Alternative 1", "Alternative 2", "Alternative 3", "Alternative 4"]. ` +
+      `No other text.`;
 
-    const result = await model.generateContent(prompt);
-    const text = result.response.text().trim();
-    
-    // Extract the JSON array
-    const start = text.indexOf('[');
-    const end = text.lastIndexOf(']') + 1;
-    const jsonStr = start >= 0 && end > start ? text.slice(start, end) : '[]';
-    
-    const alternatives = JSON.parse(jsonStr);
+    const result = await generateText(prompt, { json: true });
+    const alternatives = extractJSON(result, true) || [];
 
     // Filter out invalid or duplicate alternatives
     const uniqueAlternatives = [...new Set(alternatives)].filter(
@@ -96,7 +84,7 @@ No other text.`;
 
     return uniqueAlternatives;
   } catch (err) {
-    console.error(`Error fetching Gemini alternatives for ${query}:`, err.message);
+    console.error(`Error fetching alternatives for ${query}:`, err.message);
     return [`Healthy alternative to ${query}`, `Nutritious version of ${query}`, `Low-calorie ${query}`, `Diet-friendly ${query}`];
   }
 }
@@ -107,25 +95,25 @@ async function searchAlternatives(req, res) {
   if (!q) return res.status(400).json({ error: 'Query parameter `q` is required' });
 
   try {
-    // Fetch alternatives from Gemini API
-    const alternatives = await fetchGeminiAlternatives(q);
+    // Fetch alternatives using local AI
+    const alternatives = await fetchAlternatives(q);
     console.log(`Got ${alternatives.length} alternatives for "${q}":`, alternatives);
 
     // Fetch Amazon products and YouTube recipes for each alternative
     const amazonPromises = alternatives.map(alt => fetchTopAmazonProduct(alt));
     const youtubePromises = alternatives.map(alt => fetchTopYouTubeRecipe(alt));
-    
+
     const [amazonResults, youtubeResults] = await Promise.all([
       Promise.all(amazonPromises),
       Promise.all(youtubePromises)
     ]);
-    
+
     // Filter out null results
     const amazonProducts = amazonResults.filter(Boolean);
     const youtubeRecipes = youtubeResults.filter(Boolean);
 
-    res.json({ 
-      amazonProducts, 
+    res.json({
+      amazonProducts,
       youtubeRecipes,
       query: q,
       alternatives
@@ -139,6 +127,6 @@ async function searchAlternatives(req, res) {
 module.exports = {
   fetchTopAmazonProduct,
   fetchTopYouTubeRecipe,
-  fetchGeminiAlternatives,
+  fetchAlternatives,
   searchAlternatives
 };

@@ -38,4 +38,19 @@ const isAuthenticated = async (req, res, next) => {
     }
 };
 
-module.exports = { isAuthenticated };
+const optionalAuth = async (req, res, next) => {
+    try {
+        const token = req.cookies.token;
+        if (!token) {
+            return next();
+        }
+        const decode = jwt.verify(token, process.env.SECRET_KEY);
+        req.user = decode.userId;
+        next();
+    } catch (error) {
+        // If token is invalid or expired, just proceed as unauthenticated
+        next();
+    }
+};
+
+module.exports = { isAuthenticated, optionalAuth };

@@ -28,23 +28,29 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-green-50 to-white flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-xl shadow-md">
+    <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #0f172a, #1e2022)' }}>
+      {/* Animated background orbs */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0">
+        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-blue-600/10 blur-[120px]"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-emerald-600/10 blur-[120px]"></div>
+      </div>
+
+      <div className="max-w-md w-full space-y-8 p-8 rounded-2xl border border-white/10 shadow-2xl relative z-10" style={{ background: 'rgba(30, 32, 34, 0.6)', backdropFilter: 'blur(16px)' }}>
         <div className="text-center">
-          <h1 className="text-3xl font-bold">
-            <span className="text-blue-600">Eat</span>
-            <span className="text-green-600">iT</span>
+          <h1 className="text-4xl font-extrabold tracking-tight">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-600">Eat</span>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-emerald-600">iT</span>
           </h1>
-          <h2 className="mt-2 text-xl font-semibold text-gray-800">Welcome back</h2>
-          <p className="mt-1 text-sm text-gray-500">Sign in to your nutrition assistant</p>
+          <h2 className="mt-4 text-2xl font-semibold text-white">Welcome back</h2>
+          <p className="mt-2 text-sm text-gray-400">Sign in to your intelligent nutrition assistant</p>
         </div>
 
         <form onSubmit={loginSubmitHandler} className="space-y-6">
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="email" className="block text-sm font-medium text-gray-300">
               Email address
             </label>
-            <div className="mt-1 relative">
+            <div className="mt-1 relative rounded-md shadow-sm">
               <input
                 type="email"
                 name="email"
@@ -52,25 +58,25 @@ const Login = () => {
                 placeholder="you@example.com"
                 value={input.email}
                 onChange={changeEventHandler}
-                className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="pl-10 pr-4 py-3 w-full bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
               />
-              <Mail className="absolute top-1/2 left-3 transform -translate-y-1/2 text-gray-400" size={18} />
+              <Mail className="absolute top-1/2 left-3 transform -translate-y-1/2 text-gray-500" size={18} />
               {errors.email && (
-                <p className="mt-1 text-xs text-red-500">{errors.email}</p>
+                <p className="mt-1 text-xs text-red-400">{errors.email}</p>
               )}
             </div>
           </div>
 
           <div>
-            <div className="flex justify-between items-center">
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+            <div className="flex justify-between items-center mb-1">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-300">
                 Password
               </label>
-              <Link to="/forgot-password" className="text-xs text-blue-600 hover:text-blue-500 font-medium">
+              <Link to="/forgot-password" className="text-xs text-emerald-400 hover:text-emerald-300 font-medium transition-colors">
                 Forgot password?
               </Link>
             </div>
-            <div className="mt-1 relative">
+            <div className="relative rounded-md shadow-sm">
               <input
                 type="password"
                 name="password"
@@ -78,11 +84,11 @@ const Login = () => {
                 placeholder="••••••••"
                 value={input.password}
                 onChange={changeEventHandler}
-                className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="pl-10 pr-4 py-3 w-full bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
               />
-              <LockKeyhole className="absolute top-1/2 left-3 transform -translate-y-1/2 text-gray-400" size={18} />
+              <LockKeyhole className="absolute top-1/2 left-3 transform -translate-y-1/2 text-gray-500" size={18} />
               {errors.password && (
-                <p className="mt-1 text-xs text-red-500">{errors.password}</p>
+                <p className="mt-1 text-xs text-red-400">{errors.password}</p>
               )}
             </div>
           </div>
@@ -90,27 +96,26 @@ const Login = () => {
           <button
             type="submit"
             disabled={loading}
-            className={`w-full flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
+            className={`w-full flex items-center justify-center px-4 py-3 border border-transparent rounded-xl shadow-lg text-sm font-medium text-white ${
               loading
-                ? "bg-blue-400 cursor-not-allowed"
-                : "bg-blue-600 hover:bg-blue-700"
-            } transition-colors duration-300`}
+                ? "bg-emerald-600/50 cursor-not-allowed"
+                : "bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500"
+            } transition-all duration-300 transform hover:-translate-y-1`}
           >
-            {loading && <Loader2 className="animate-spin h-4 w-4 mr-2" />}
-            {loading ? "Signing in..." : "Sign in"}
+            {loading && <Loader2 className="animate-spin h-5 w-5 mr-3" />}
+            {loading ? "Signing in..." : "Sign In"}
           </button>
 
-          <div className="flex items-center my-4">
-            <div className="flex-grow border-t border-gray-200"></div>
-            <div className="mx-4 text-gray-500 text-sm">or</div>
-            <div className="flex-grow border-t border-gray-200"></div>
+          <div className="flex items-center my-6">
+            <div className="flex-grow border-t border-white/10"></div>
+            <div className="mx-4 text-gray-500 text-sm font-medium">NEW TO EATIT?</div>
+            <div className="flex-grow border-t border-white/10"></div>
           </div>
 
-          <p className="text-center text-sm text-gray-600">
-            Don't have an account?{" "}
-            <Link to="/signup" className="text-blue-600 hover:text-blue-500 font-medium">
+          <p className="text-center text-sm text-gray-400">
+            <Link to="/signup" className="text-emerald-400 hover:text-emerald-300 font-semibold transition-colors">
               Create an account
-            </Link>
+            </Link> instead.
           </p>
         </form>
       </div>

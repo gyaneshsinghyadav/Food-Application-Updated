@@ -2,7 +2,9 @@ const Post = require("../models/Post.js");
 const Comment = require("../models/Comment.js");
 const Reply = require("../models/Reply.js");
 const { formatTimestamp } = require("../utils/timeFormatter");
-const { uploadOnCloudinary } = require("../utils/cloudinary.js");
+const fs = require("fs");
+const path = require("path");
+// const { uploadOnCloudinary } = require("../utils/cloudinary.js");
 const { Types } = require("mongoose");
 const Like = require("../models/Like.js");
 const createPost = async (req, res) => {
@@ -18,14 +20,13 @@ const createPost = async (req, res) => {
 
     let imageData = null;
     
-    if (imageLocalPath) {
-      const uploadedImage = await uploadOnCloudinary(imageLocalPath);
-      if (uploadedImage) {
-        imageData = {
-          url: uploadedImage.secure_url,
-          publicId: uploadedImage.public_id
-        };
-      }
+    if (imageLocalPath && req.file?.filename) {
+      const fileName = req.file.filename;
+      const baseUrl = process.env.BACKEND_URL || "http://localhost:3000";
+      imageData = {
+        url: `${baseUrl}/uploads/${fileName}`,
+        publicId: fileName
+      };
     }
     
     const postData = {
@@ -80,9 +81,15 @@ const deletePost = async (req, res) => {
       return res.status(403).json({ error: "Unauthorized" });
     }
 
-    if (post.images.length > 0) {
+    if (post.images && post.images.length > 0) {
       for (const image of post.images) {
-        await deleteFromCloudinary(image.url);
+        if (image.publicId) {
+          try {
+             fs.unlinkSync(path.join(__dirname, '../public/uploads', image.publicId));
+          } catch (err) {
+             console.error("Failed to delete local image:", err.message);
+          }
+        }
       }
     }
 

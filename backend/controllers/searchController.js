@@ -1,4 +1,4 @@
-const { fetchGeminiAlternatives, fetchTopAmazonProduct, fetchTopYouTubeRecipe } = require('./alternatives.js'); // Correct path
+const { fetchAlternatives, fetchTopAmazonProduct, fetchTopYouTubeRecipe } = require('./alternatives.js'); // Correct path
 
 async function searchAlternatives(req, res) {
   const { q } = req.query;
@@ -6,7 +6,7 @@ async function searchAlternatives(req, res) {
 
   try {
     console.log('[searchAlternatives] Fetching alternatives...');
-    const alternatives = await fetchGeminiAlternatives(q);
+    const alternatives = await fetchAlternatives(q);
 
     if (!alternatives || alternatives.length === 0) {
       return res.status(404).json({ error: 'No alternatives found for the query.' });

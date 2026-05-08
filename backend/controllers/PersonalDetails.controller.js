@@ -1,5 +1,5 @@
 const User = require("../models/UserInformation");
-const { uploadOnCloudinary } = require("../utils/cloudinary.js");
+// const { uploadOnCloudinary } = require("../utils/cloudinary.js");
 const {analyzeHealthFromImage} = require("./Analysis-Data.js")
 const EnterPersonaldetails = async (req, res) => {
   try {
@@ -33,14 +33,13 @@ const EnterPersonaldetails = async (req, res) => {
     if (!dietPreference) missingFields.push("Diet Preference");
     let imageData = null;
     
-    if (imageLocalPath) {
-      const uploadedImage = await uploadOnCloudinary(imageLocalPath);
-      if (uploadedImage) {
-        imageData = {
-          url: uploadedImage.secure_url,
-          publicId: uploadedImage.public_id
-        };
-      }
+    if (imageLocalPath && req.file?.filename) {
+      const fileName = req.file.filename;
+      const baseUrl = process.env.BACKEND_URL || "http://localhost:3000";
+      imageData = {
+        url: `${baseUrl}/uploads/${fileName}`,
+        publicId: fileName
+      };
     }
     console.log(imageData)
     // If any required fields are missing, return error with specific details
@@ -77,8 +76,8 @@ const EnterPersonaldetails = async (req, res) => {
     }
     if(imageData) PersonalData.image=imageData;
     
-    if(imageData?.url) {
-      const analysisString=await analyzeHealthFromImage(imageData?.url);
+    if(imageData && imageLocalPath) {
+      const analysisString=await analyzeHealthFromImage(imageLocalPath);
       if(analysisString) PersonalData.documents=analysisString;
       console.log(analysisString)
     }
@@ -101,7 +100,7 @@ const EnterPersonaldetails = async (req, res) => {
 
 const updateProfile = async (req, res) => {
   try {
-    const userId = req.id || req.userId;
+    const userId = req.user;
     if (!userId) {
       return res.status(401).json({
         success: false,
@@ -168,7 +167,7 @@ const updateProfile = async (req, res) => {
 
 const FetchDetails = async (req, res) => {
   try {
-    const userId = req.id || req.userId;
+    const userId = req.user;
 
     if (!userId) {
       return res.status(401).json({

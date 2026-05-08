@@ -1,11 +1,8 @@
-const { GoogleGenAI, createUserContent, createPartFromUri } = require('@google/genai');
-const fs = require('fs'); // Import fs module
-const path = require('path'); // Import path module
-const os = require('os'); // Import os module for temporary directory
+const fs = require('fs');
+const path = require('path');
+const { generateText, analyzeImage } = require('../utils/aiService.js');
 
-const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY });
-
-// Ensure uploads directory exists (optional, can be done manually)
+// Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
@@ -13,66 +10,41 @@ if (!fs.existsSync(uploadsDir)) {
 
 const handleChat = async (req, res) => {
   const { message, sessionId } = req.body;
-  const file = req.file; // file object from multer
+  const file = req.file;
 
   console.log('Request payload:', { message, file: file?.originalname, sessionId });
 
-  let tempFilePath = null; // Variable to store temporary file path
+  let tempFilePath = null;
 
   try {
-    let fileMetadata = null;
+    let reply;
 
-    // If a file is uploaded, save it temporarily and upload via path
     if (file) {
-      // Create a unique temporary file path
+      // Save the uploaded file temporarily
       const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
       tempFilePath = path.join(uploadsDir, uniqueSuffix + '-' + file.originalname);
 
       console.log(`Saving temporary file to: ${tempFilePath}`);
-      // Write the buffer to the temporary file
       fs.writeFileSync(tempFilePath, file.buffer);
 
-      console.log(`Uploading file from path: ${tempFilePath}`);
-
-      // Upload the file using the file path
-      const uploadedFile = await ai.files.upload({
-        file: tempFilePath,
+      // Use vision model to analyze the image with the user's message
+      console.log(`Analyzing image with prompt: ${message}`);
+      reply = await analyzeImage(tempFilePath, message || 'Describe this image.');
+    } else {
+      // Text-only chat — use text model
+      reply = await generateText(message, {
+        system: 'You are a helpful nutrition and health assistant. Give concise, practical advice about food, diet, and nutrition. Keep responses friendly and informative.',
       });
-
-      fileMetadata = {
-        uri: uploadedFile.uri,
-        mimeType: uploadedFile.mimeType || file.mimetype,
-        name: file.originalname,
-        size: file.size,
-      };
-
-      console.log('Uploaded file metadata:', fileMetadata);
     }
 
-    // Prepare the request payload
-    const contents = fileMetadata
-      ? createUserContent([createPartFromUri(fileMetadata.uri, fileMetadata.mimeType), message])
-      : message;
-
-    // Send the request to the Gemini API
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
-      contents,
-    });
-
-    console.log('Response from Gemini API:', response.text);
-
-    const reply = response.text || 'No response from Gemini API';
-    res.json({ reply });
+    console.log('Response from AI:', reply);
+    res.json({ reply: reply || 'No response from AI' });
 
   } catch (error) {
-    console.error('Error communicating with Gemini API:', error.message);
-    if (error.response && error.response.data) {
-      console.error('Gemini API Error Details:', error.response.data);
-    }
-    res.status(500).json({ reply: 'Error: Unable to process your request. Please try again later.' });
+    console.error('Error communicating with AI:', error.message);
+    res.status(500).json({ reply: 'Error: Unable to process your request. Make sure Ollama is running (ollama serve).' });
   } finally {
-    // Clean up the temporary file if it was created
+    // Clean up temporary file
     if (tempFilePath && fs.existsSync(tempFilePath)) {
       try {
         fs.unlinkSync(tempFilePath);

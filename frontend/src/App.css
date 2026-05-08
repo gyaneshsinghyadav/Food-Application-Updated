@@ -3,14 +3,6 @@
 @tailwind utilities;
 
 /* Custom styles */
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 0;
-  text-align: center;
-  width: 100%;
-}
-
 .app-container {
   @apply flex flex-col min-h-screen w-full;
 }
@@ -62,26 +54,7 @@
   background-color: var(--primary-dark);
 }
 
-/* Navigation buttons container */
-.flex {
-  display: flex;
-}
-
-.flex-wrap {
-  flex-wrap: wrap;
-}
-
-.gap-4 {
-  gap: 1rem;
-}
-
-.p-4 {
-  padding: 1rem;
-}
-
-.bg-gray-100 {
-  background-color: #f7fafc;
-}
+/* Navigation buttons container completely removed to prevent Tailwind conflicts */
 
 /* Navigation buttons in a single row */
 .btn-nav {

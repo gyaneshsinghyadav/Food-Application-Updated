@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
+import { Camera, RefreshCw, XCircle, AlertCircle } from 'lucide-react';
 
 const CameraCapture = ({ onCapture, onCancel }) => {
   const videoRef = useRef(null);
@@ -84,34 +85,35 @@ const CameraCapture = ({ onCapture, onCancel }) => {
   }, [facingMode]); // Re-run when facingMode changes
 
   return (
-    <div className="camera-capture">
-      <div className="camera-container">
+    <div className="flex flex-col items-center bg-gray-900 rounded-2xl overflow-hidden border border-gray-800 shadow-2xl w-full max-w-md mx-auto my-4">
+      <div className="relative w-full aspect-[3/4] bg-black flex items-center justify-center">
+        {!stream && !error && <div className="animate-pulse text-gray-500">Starting camera...</div>}
         <video 
           ref={videoRef} 
           autoPlay 
           playsInline 
           muted 
-          className="camera-video" 
+          className={`w-full h-full object-cover transition-opacity duration-300 ${stream ? 'opacity-100' : 'opacity-0'}`}
           onLoadedMetadata={() => videoRef.current?.play()}
         />
-        <canvas ref={canvasRef} style={{ display: 'none' }} />
+        <canvas ref={canvasRef} className="hidden" />
       </div>
       
       {error && (
-        <div className="alert alert-error">
-          <i className="icon-error"></i> {error}
+        <div className="w-full p-4 bg-red-900/50 border-y border-red-500/50 text-red-200 flex items-center gap-2 text-sm">
+          <AlertCircle size={18} className="shrink-0" /> <span className="break-words">{error}</span>
         </div>
       )}
       
-      <div className="camera-controls">
-        <button onClick={switchCamera} className="btn btn-secondary">
-          <i className="icon-switch"></i> Switch Camera
+      <div className="w-full p-6 bg-gray-900 flex justify-center gap-6 items-center border-t border-gray-800">
+        <button onClick={switchCamera} disabled={!stream} className="p-3 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-white rounded-full transition-colors" aria-label="Switch Camera">
+          <RefreshCw size={24} />
         </button>
-        <button onClick={captureImage} className="btn btn-alternative">
-          <i className="icon-capture"></i> Capture
+        <button onClick={captureImage} disabled={!stream} className="p-5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white rounded-full transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:shadow-[0_0_20px_rgba(16,185,129,0.5)] transform hover:scale-105 active:scale-95" aria-label="Capture">
+          <Camera size={32} />
         </button>
-        <button onClick={onCancel} className="btn btn-outline">
-          <i className="icon-close"></i> Cancel
+        <button onClick={onCancel} className="p-3 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-full transition-colors" aria-label="Cancel">
+          <XCircle size={24} />
         </button>
       </div>
     </div>
