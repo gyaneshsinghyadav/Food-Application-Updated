@@ -791,35 +791,64 @@ const EnterPersonalDetails = ({ isEdit = false }) => {
                     )}
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700">
-                      Medical Reports
-                    </label>
-                    <div className="flex items-center space-x-4">
-                      <label className="relative cursor-pointer">
-                        <span className="sr-only">Upload Medical Reports</span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          ref={fileInputRef}
-                          onChange={handleImageChange}
-                          className="hidden"
-                        />
-                        <div className="w-24 h-24 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center hover:border-blue-500 transition-colors">
-                          {imagePreview ? (
+                  {/* ── Health Report Upload ── */}
+                  <div className="space-y-3 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-5 border border-blue-200">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-2xl">📋</span>
+                      <div>
+                        <label className="block text-sm font-semibold text-blue-800">
+                          Upload Your Health Report
+                        </label>
+                        <p className="text-xs text-blue-600">
+                          Blood test or lab report — we'll extract values to personalize your food recommendations
+                        </p>
+                      </div>
+                    </div>
+
+                    <label className="relative cursor-pointer block">
+                      <span className="sr-only">Upload Health Report</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        ref={fileInputRef}
+                        onChange={handleImageChange}
+                        className="hidden"
+                      />
+                      <div className={`w-full h-28 rounded-lg border-2 border-dashed ${imagePreview ? 'border-green-400 bg-green-50' : 'border-blue-300 bg-white'} flex items-center justify-center hover:border-blue-500 hover:bg-blue-50 transition-all duration-200`}>
+                        {imagePreview ? (
+                          <div className="flex items-center gap-3">
                             <img
                               src={imagePreview}
-                              alt="Profile preview"
-                              className="w-full h-full rounded-lg object-cover"
+                              alt="Report preview"
+                              className="h-20 w-20 rounded-lg object-cover border-2 border-white shadow"
                             />
-                          ) : (
-                            <ImageIcon className="text-gray-400" size={24} />
-                          )}
-                        </div>
-                      </label>
+                            <div className="text-left">
+                              <p className="text-sm font-medium text-green-700">✅ Report uploaded!</p>
+                              <p className="text-xs text-green-600">We'll analyze it when you submit</p>
+                              <p className="text-xs text-blue-500 mt-1 underline">Click to change</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-center">
+                            <ImageIcon className="text-blue-400 mx-auto mb-1" size={28} />
+                            <p className="text-sm font-medium text-blue-600">Tap to upload report image</p>
+                            <p className="text-xs text-gray-400">JPEG, PNG — blood test, CBC, lipid profile, etc.</p>
+                          </div>
+                        )}
+                      </div>
+                    </label>
+
+                    {/* What gets extracted */}
+                    <div className="flex flex-wrap gap-1.5">
+                      {['Blood Sugar', 'Cholesterol', 'BP', 'Hemoglobin', 'Thyroid', 'Liver', 'Kidney', 'Vitamins'].map((item) => (
+                        <span key={item} className="text-xs bg-white text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">
+                          ✓ {item}
+                        </span>
+                      ))}
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Upload a clear medical report of yourself (JPEG or PNG)
+
+                    <p className="text-xs text-gray-500 italic">
+                      Optional — you can skip and upload later from your Profile page
                     </p>
                   </div>
                 </div>

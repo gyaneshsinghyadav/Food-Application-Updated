@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import axios from "axios";
 
 
 export const useHealthProfileStore = create(
@@ -40,28 +41,31 @@ export const useHealthProfileStore = create(
       // Update profile
       updateProfileDetails: async (input) => {
         set({ profile: input, loading: false });
-        // try {
-
-        //   set({ loading: true, error: null });
-
-        //   const response = await axios.put(`${API_URL}/Update-Personal-Details`, input, {
-        //     headers: { "Content-Type": "application/json" },
-        //   });
-
-        //   if (response.data.success) {
-        //     toast.success(response.data.message);
-            
-        //   } else {
-        //     throw new Error(response.data.message);
-        //   }
-        // } catch (error) {
-        //   const errMsg = error.response?.data?.message || "Profile update failed";
-        //   toast.error(errMsg);
-        //   set({ loading: false, error: errMsg });
-        // }
       },
 
-      // Optional: fetch profile if needed
+      // Fetch profile
+      fetchProfile: async () => {
+        try {
+          set({ loading: true, error: null });
+          const response = await axios.get(
+            `${import.meta.env.VITE_URL || 'http://localhost:3000'}/api/v1/profile/me`,
+            {
+              headers: {
+                Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+              },
+              withCredentials: true,
+            }
+          );
+          if (response.data.success) {
+            set({ profile: response.data.user, loading: false });
+          } else {
+            set({ loading: false, error: response.data.message });
+          }
+        } catch (error) {
+          const errMsg = error.response?.data?.message || "Failed to fetch profile";
+          set({ loading: false, error: errMsg });
+        }
+      },
     }),
     {
       name: "health-profile",

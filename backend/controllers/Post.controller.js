@@ -9,13 +9,13 @@ const { Types } = require("mongoose");
 const Like = require("../models/Like.js");
 const createPost = async (req, res) => {
   try {
-    const { text, poll, category,userFullName } = req.body;
+    const { text, poll, category, userFullName, scanData } = req.body;
     const imageLocalPath = req.file?.path;
     if (!userFullName){
       return res.status(400).json({ error: "User full name is required" });
     }
-    if (!(text || poll || imageLocalPath)) {
-      return res.status(400).json({ error: "Need either text, poll or image to create post" });
+    if (!(text || poll || imageLocalPath || scanData)) {
+      return res.status(400).json({ error: "Need either text, poll, image or scan data to create post" });
     }
 
     let imageData = null;
@@ -35,6 +35,15 @@ const createPost = async (req, res) => {
       text: text || null,
       category: category || 'all'
     };
+
+    // Attach scan result data if sharing a scan
+    if (scanData) {
+      try {
+        postData.scanData = typeof scanData === 'string' ? JSON.parse(scanData) : scanData;
+      } catch (e) {
+        postData.scanData = scanData;
+      }
+    }
 
     if (imageData) {
       postData.images = imageData;  

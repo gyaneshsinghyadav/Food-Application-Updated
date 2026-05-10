@@ -185,11 +185,11 @@ function Scan() {
 
     // Simulate progress steps for UX
     const steps = [
-      'Classifying image...',
-      'Checking for nutrition label...',
-      'Identifying item...',
-      'Running deep analysis...',
-      'Fetching alternatives...',
+      'Identifying item with AI Vision...',
+      'Extracting text & labels (OCR)...',
+      'Running deep nutritional analysis...',
+      'Evaluating ingredients...',
+      'Generating health insights...',
     ];
     let stepIdx = 0;
     setLoadingStep(steps[0]);
@@ -211,7 +211,13 @@ function Scan() {
       );
       const data = response.data;
       if (data.error) setError(data.error);
-      else setResult(data);
+      else {
+        setResult(data);
+        // Save for community Share Scan feature
+        if (data.analysis) {
+          try { localStorage.setItem('eatit_last_scan', JSON.stringify(data.analysis)); } catch(e) {}
+        }
+      }
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'An error occurred while processing the request.');
     } finally {
@@ -468,10 +474,14 @@ function Scan() {
                 {/* Nutrition / Analysis card */}
                 <NutritionCard info={result.analysis} category={category} />
 
-                {/* Raw label text (packaged food) */}
+                {/* Raw label / OCR text (packaged food, medicine, skincare) */}
                 {result.rawLabelText && (
                   <details className="rounded-xl border border-white/5 bg-white/3 backdrop-blur-sm p-4 text-sm text-slate-500 cursor-pointer">
-                    <summary className="text-slate-400 font-medium hover:text-slate-300 transition-colors">📋 Raw Label Text (OCR)</summary>
+                    <summary className="text-slate-400 font-medium hover:text-slate-300 transition-colors">
+                      {category === 'medicine' ? '💊 Extracted Medicine Info (OCR)' :
+                       category === 'skincare' ? '🧴 Extracted Product Info (OCR)' :
+                       '📋 Raw Label Text (OCR)'}
+                    </summary>
                     <pre className="mt-3 text-xs text-slate-500 whitespace-pre-wrap font-mono bg-black/20 rounded-lg p-3 max-h-48 overflow-y-auto">
                       {result.rawLabelText}
                     </pre>

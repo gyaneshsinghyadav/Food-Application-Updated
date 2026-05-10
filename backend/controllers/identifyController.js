@@ -1,178 +1,88 @@
 const path = require('path');
 const fs = require('fs');
-const { generateText, extractJSON } = require('../utils/aiService.js');
-const spoonacular = require('../utils/spoonacularService');
+const { analyzeImage, generateText, extractJSON } = require('../utils/aiService.js');
 const { preprocessImage, cleanupProcessed } = require('../utils/imagePreprocessor.js');
 const Information = require('../models/UserInformation.js');
+const { fetchTopYouTubeRecipe, fetchTopAmazonProduct } = require('./alternatives.js');
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CATEGORY CONSTANTS
+// STAGE 1 — CLASSIFY + IDENTIFY (single vision call)
+// Optimised prompt for local vision models (llama3.2-vision / llava)
 // ─────────────────────────────────────────────────────────────────────────────
-const VALID_CATEGORIES = ['food', 'beverage', 'medicine', 'skincare', 'packaged_food', 'rejected'];
+async function classifyAndIdentify(imagePath) {
+  const prompt = `Identify this image. Answer with JSON only.
 
-const DEFAULT_LABELS = {
-  food: 'Food Dish',
-  beverage: 'Beverage',
-  medicine: 'Medicine',
-  skincare: 'Skincare Product',
-  packaged_food: 'Packaged Food Pasync function classifyImage(imagePath) {
-  // Use Spoonacular's image analysis endpoint to get category and nutrition.
-  try {
-    const result = await spoonacular.analyzeImageFile(imagePath);
-    // result.category.name may be like "burger", "pizza" etc. Map to our internal categories.
-    const spoonCategory = result.category && result.category.name ? result.category.name.toLowerCase() : '';
-    // Simple heuristic mapping based on Spoonacular category names.
-    if (spoonCategory.includes('beverage') || spoonCategory.includes('drink')) return 'beverage';
-    if (spoonCategory.includes('medicine') || spoonCategory.includes('pill') || spoonCategory.includes('tablet')) return 'medicine';
-    if (spoonCategory.includes('skincare') || spoonCategory.includes('cream') || spoonCategory.includes('lotion')) return 'skincare';
-    if (spoonCategory.includes('packaged') || spoonCategory.includes('packet') || spoonCategory.includes('snack')) return 'packaged_food';
-    // Default to food for most dish categories.
-    return 'food';
-  } catch (err) {
-    console.error('[classifyImage] Spoonacular error:', err.message);
-    // Fallback to original AI classification if Spoonacular fails.
-    return 'food';
-  }
-}ablet') || lower.includes('capsule')) return 'medicine';
-    if (lower.includes('skincare') || lower.includes('cream') || lower.includes('serum')) return 'skincare';
-    if (lower.includes('beverage') || lower.includes('drink') || lower.includes('juice') || lower.includes('coffee') || lower.includes('tea') || lower.includes('lassi')) return 'beverage';
-    if (lower.includes('rejected') || lower.includes('vehicle') || lower.includes('furniture') || lower.includes('electronic')) return 'rejected';
+Rules:
+- "category": one of food, beverage, packaged_food, medicine, skincare, rejected
+  packaged_food = sealed packet/box with brand label (chips, biscuits, noodles)
+  medicine = pills, tablet strips, bottles, syrups
+  skincare = creams, lotions, face wash
+  beverage = any drink
+  food = cooked/prepared dish or snack
+  rejected = not any of the above
+- "label": the EXACT specific name of the item
+  WRONG: "Indian sweet", "fried snack", "curry", "medicine"
+  RIGHT: "Jalebi", "Samosa", "Butter Chicken", "Paracetamol 500mg"
+  For Indian food be very specific: Jalebi, Gulab Jamun, Chole Bhature, Pav Bhaji, Paneer Tikka, Masala Dosa, Biryani, Dal Makhani, Samosa, Aloo Paratha, Idli, Vada Pav, Dhokla, Kachori, Rasgulla, Ladoo
+  For packaged items READ the brand name printed on the pack
+- "hasText": true if you can see printed text/labels on the item
+- "confidence": high, medium, or low
+- "prepMethod": fried, baked, grilled, steamed, raw, boiled, roasted, sauteed, or unknown
+- "portionSize": small, medium, large, or unknown
 
-    return 'food'; // Safe default
-  } catch (err) {
-    console.error('[classifyImage] Error:', err.message);
-    return 'food';
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// STEP 1b — IDENTIFY (focused single-task prompt, category-aware)
-// One job only: name the specific item. Uses the known category for context.
-// ─────────────────────────────────────────────────────────────────────────────
-async function identifyItem(imagePath, category) {
-  const categoryContext = {
-    food: `This is a FOOD DISH. Identify the EXACT dish name.
-
-EXAMPLES of the specificity expected:
-- "Chole Bhature" NOT "Indian food" or "curry"
-- "Palak Paneer" NOT "green curry" or "paneer dish"
-- "Hyderabadi Chicken Biryani" NOT "rice" or "biryani" alone
-- "Masala Dosa" NOT "crepe" or "dosa" alone if you can see stuffing
-- "Aloo Paratha" NOT "flatbread" or "paratha" alone if you can see potato
-- "Pav Bhaji" NOT "vegetable curry"
-- "Gulab Jamun" NOT "dessert" or "sweet"
-- "Medu Vada" NOT "fritter" or "vada"
-- "Samosa" NOT "fried snack"
-- "Jalebi" NOT "sweet" or "Indian sweet"
-- "Paneer Tikka" NOT "grilled cheese"
-- "Butter Chicken" NOT "chicken curry"
-- "Dal Makhani" NOT "lentils" or "dal"
-- "Rajma Chawal" NOT "beans and rice"
-- "Pasta Alfredo" NOT "pasta"
-- "Margherita Pizza" NOT "pizza"
-
-Think step by step: What ingredients can you see? What cooking method? What shape? What colour? What garnish? Use these clues to name the exact dish.`,
-
-    beverage: `This is a BEVERAGE. Identify the EXACT drink.
-Examples: "Mango Lassi", "Masala Chai", "Cold Brew Coffee", "Orange Juice", "Nimbu Pani", "Thandai", "Green Smoothie"
-If it's a branded product, read the brand name: "Coca Cola", "Tropicana Orange Juice", "Bisleri Water"`,
-
-    medicine: `This is a MEDICINE or SUPPLEMENT. Read any visible text on the packaging, strip, or bottle.
-Identify the drug name and strength if visible.
-Examples: "Paracetamol 500mg", "Crocin Advance", "Dolo 650", "Vitamin D3 1000IU", "Becosules Capsule"`,
-
-    skincare: `This is a SKINCARE or COSMETIC product. Read the brand name and product name from the packaging.
-Examples: "Nivea Soft Moisturising Cream", "Neutrogena Sunscreen SPF 50", "Lakme Absolute Foundation", "Cetaphil Gentle Cleanser"`,
-
-    packaged_food: `This is a PACKAGED FOOD product. Read the EXACT brand name and product name from the packaging.
-Examples: "Lays Magic Masala Chips", "Maggi 2-Minute Masala Noodles", "Britannia Marie Gold Biscuits", "Amul Butter 500g", "Haldiram's Aloo Bhujia", "Parle-G Biscuits"
-Look carefully at ALL text on the pack for the brand and product name.`,
-  };
-
-  const context = categoryContext[category] || categoryContext.food;
-
-  const prompt = `You are an expert identification system with deep knowledge of Indian and global cuisine, medicines, and consumer products.
-
-${context}
-
-Look at this image VERY carefully. What SPECIFIC item is this?
-
-Reply with ONLY a JSON object:
-{"label": "Exact specific item name here", "confidence": "high", "prepMethod": "fried", "portionSize": "medium"}
-
-For prepMethod use one of: fried | baked | grilled | steamed | raw | boiled | roasted | shallow_fried | sauteed | unknown
-For portionSize use one of: small | medium | large | single_serving | unknown
-For confidence use one of: high | medium | low`;
+JSON:
+{"category":"food","label":"Jalebi","hasText":false,"confidence":"high","prepMethod":"fried","portionSize":"medium"}`;
 
   try {
     const resp = await analyzeImage(imagePath, prompt, { temperature: 0.1, json: true });
-    console.log('[identifyItem] Raw response:', resp);
+    console.log('[classifyAndIdentify] Raw:', resp.substring(0, 300));
 
     const parsed = extractJSON(resp, false);
     if (parsed && parsed.label) {
+      const validCats = ['food', 'beverage', 'packaged_food', 'medicine', 'skincare', 'rejected'];
+      if (!validCats.includes(parsed.category)) parsed.category = 'food';
+
       let lbl = String(parsed.label).replace(/['"""''[\]]/g, '').trim();
-
-      // Reject vague/generic labels
-      if (/^(unknown|none|null|undefined|n\/a|not |cannot|can't|unable|food item|a food|the food|some food|an? (indian|chinese|western|dish|item|product|snack|drink|beverage|food|meal|curry|rice|bread|sweet|dessert)$)/i.test(lbl)) {
-        return { label: null, confidence: 'low', prepMethod: 'unknown', portionSize: 'unknown' };
+      // Reject vague labels
+      if (/^(unknown|none|null|n\/a|food|dish|item|product|snack|sweet|dessert|curry|meal|an? |the |some |indian |this )/i.test(lbl)) {
+        parsed.label = null;
+        parsed.confidence = 'low';
+      } else {
+        parsed.label = lbl;
       }
-
-      return {
-        label: lbl,
-        confidence: parsed.confidence || 'medium',
-        prepMethod: parsed.prepMethod || 'unknown',
-        portionSize: parsed.portionSize || 'unknown',
-      };
+      return parsed;
     }
-
-    // Try to extract just the label text
-    const clean = resp.trim()
-      .replace(/['""\u201c\u201d\u2018\u2019[\]]/g, '')
-      .replace(/\.$/, '')
-      .split('\n')[0]
-      .trim();
-
-    if (clean.length >= 2 && clean.length <= 100 && !/^(unknown|i (cannot|can't|don't)|sorry|unable)/i.test(clean)) {
-      return { label: clean, confidence: 'low', prepMethod: 'unknown', portionSize: 'unknown' };
-    }
-
-    return { label: null, confidence: 'low', prepMethod: 'unknown', portionSize: 'unknown' };
+    return { category: 'food', label: null, confidence: 'low', hasText: false, prepMethod: 'unknown', portionSize: 'unknown' };
   } catch (err) {
-    console.error('[identifyItem] Error:', err.message);
-    return { label: null, confidence: 'low', prepMethod: 'unknown', portionSize: 'unknown' };
+    console.error('[classifyAndIdentify] Error:', err.message);
+    return { category: 'food', label: null, confidence: 'low', hasText: false, prepMethod: 'unknown', portionSize: 'unknown' };
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STEP 1c — RE-IDENTIFY (last-resort ultra-simple prompt)
-// Called only when primary identification fails or returns a vague label.
+// STAGE 1b — RE-IDENTIFY (fallback with simpler prompt)
 // ─────────────────────────────────────────────────────────────────────────────
 async function reIdentify(imagePath, category) {
   const hints = {
-    food: 'Name this food dish. Think: What is the main ingredient? How is it cooked? What region is it from? Give the specific dish name like "Palak Paneer", "Chole Bhature", "Margherita Pizza".',
-    beverage: 'Name this drink specifically. Example: "Mango Lassi", "Masala Chai", "Espresso".',
-    medicine: 'Read the text on this medicine. What is the drug name and dosage?',
-    skincare: 'Read the brand and product name on this skincare item.',
-    packaged_food: 'Read the brand name and product name printed on this food package.',
+    food: 'What specific dish is this? Name it precisely. Examples: Jalebi, Samosa, Biryani, Paneer Tikka, Chole Bhature, Pasta Alfredo, Margherita Pizza. Answer with just the dish name, nothing else.',
+    beverage: 'What drink is this? Examples: Mango Lassi, Masala Chai, Espresso, Orange Juice. Answer with just the name.',
+    medicine: 'Read the text on this medicine. What is the drug name? Answer with just the name and dosage.',
+    skincare: 'Read the brand and product name. Answer with just the name.',
+    packaged_food: 'Read the brand and product name on this package. Answer with just the name.',
   };
 
-  const prompt = `${hints[category] || hints.food}
-
-Reply with ONLY the item name. Nothing else. 2-7 words maximum.`;
-
   try {
-    const resp = await analyzeImage(imagePath, prompt, { temperature: 0.05 });
+    const resp = await analyzeImage(imagePath, hints[category] || hints.food, { temperature: 0.1 });
     let clean = resp.trim()
       .replace(/['""\u201c\u201d\u2018\u2019[\]{}]/g, '')
       .replace(/\.$/, '')
-      .replace(/^(the |this is |it is |i see |it looks like |this appears to be )/i, '')
-      .split('\n')[0]
-      .trim();
+      .replace(/^(the |this is |it is |i see |it looks like |this appears to be |this image shows )/i, '')
+      .split('\n')[0].trim();
 
-    if (/^(unknown|i (cannot|can't|don't|am not)|sorry|unable|no food|not sure|cannot|this (is|appears|looks))/i.test(clean)) return null;
-    if (clean.length < 2 || clean.length > 100) return null;
+    if (/^(unknown|i (cannot|can't|don't)|sorry|unable|not sure|cannot|i'm not)/i.test(clean)) return null;
+    if (clean.length < 2 || clean.length > 80) return null;
 
-    console.log('[reIdentify] Final label:', clean);
+    console.log('[reIdentify] Label:', clean);
     return clean;
   } catch (err) {
     console.error('[reIdentify] Error:', err.message);
@@ -181,318 +91,134 @@ Reply with ONLY the item name. Nothing else. 2-7 words maximum.`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STEP 2a — DETECT WHAT TEXT SURFACES ARE VISIBLE ON PACKAGING
+// STAGE 2 — OCR EXTRACTION (for packaged_food, medicine, skincare)
 // ─────────────────────────────────────────────────────────────────────────────
-async function detectPackagingTextSurfaces(imagePath) {
-  const prompt = `Look at this packaged food product image. What printed text panels are visible?
+async function extractOCRData(imagePath, category) {
+  const prompts = {
+    packaged_food: `Read ALL text on this packaged food product. Extract and return JSON:
+{"brandName":"","productName":"","rawIngredientsText":"exact ingredients as printed","ingredientsList":["item1","item2"],"nutritionPer100g":{"calories":0,"protein_g":0,"fat_g":0,"carbs_g":0,"sugar_g":0,"sodium_mg":0,"fibre_g":0},"servingSize":"","allergens":[],"additives":[]}`,
 
-Answer ONLY with valid JSON:
-{
-  "hasNutritionTable": true,
-  "hasIngredientsList": true,
-  "hasBrandName": true,
-  "hasServingInfo": false,
-  "notes": "brief note on what's visible"
-}
+    medicine: `Read ALL text on this medicine. Extract and return JSON:
+{"brandName":"","drugName":"","strength":"","activeIngredients":[""],"manufacturer":"","formulation":"tablet/capsule/syrup","warnings":[]}`,
 
-- "hasNutritionTable" = a printed table showing Calories, Protein, Fat, Carbs with numbers
-- "hasIngredientsList" = a text block starting with "Ingredients:" listing components
-- "hasBrandName" = brand or product name text visible
-- "hasServingInfo" = serving size info shown`;
+    skincare: `Read ALL text on this skincare product. Extract and return JSON:
+{"brandName":"","productName":"","keyIngredients":[""],"claims":[],"skinType":"","volume":""}`
+  };
+
+  const prompt = prompts[category];
+  if (!prompt) return null;
 
   try {
     const resp = await analyzeImage(imagePath, prompt, { temperature: 0.1, json: true });
-    const parsed = extractJSON(resp, false);
-    if (parsed) return parsed;
-    return { hasNutritionTable: true, hasIngredientsList: true, hasBrandName: true, hasServingInfo: false };
+    console.log('[extractOCRData] Raw:', resp.substring(0, 300));
+    return extractJSON(resp, false);
   } catch (err) {
-    console.error('[detectPackagingTextSurfaces] Error:', err.message);
-    return { hasNutritionTable: false, hasIngredientsList: false, hasBrandName: false, hasServingInfo: false };
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// STEP 2b — OCR: EXTRACT INGREDIENTS LIST
-// ─────────────────────────────────────────────────────────────────────────────
-async function extractIngredientsList(imagePath) {
-  const prompt = `You are a precision OCR system for food packaging.
-
-Extract the INGREDIENTS LIST from this packaged food image.
-
-Rules:
-1. Find text starting with "Ingredients:" and transcribe EXACTLY as printed
-2. Preserve spelling, order, parentheses, and E-numbers
-3. Do NOT paraphrase or reorder
-4. Extract ENGLISH version if multiple languages
-
-Also identify: individual ingredients, E-numbers/additive codes, allergen callouts, artificial additives.
-
-Respond ONLY with valid JSON:
-{
-  "rawIngredientsText": "Exact text as printed",
-  "ingredientsList": ["Ingredient 1", "Ingredient 2"],
-  "eNumbers": ["E621 (MSG)"],
-  "allergens": ["Gluten", "Dairy"],
-  "artificialAdditives": ["Artificial flavour"],
-  "isPartiallyVisible": false,
-  "ingredientsCount": 0
-}`;
-
-  try {
-    const resp = await analyzeImage(imagePath, prompt, { temperature: 0.1, json: true });
-    console.log('[extractIngredientsList] Raw response:', resp.substring(0, 200));
-    const parsed = extractJSON(resp, false);
-    if (parsed && parsed.rawIngredientsText) return parsed;
-    const textMatch = resp.match(/ingredients[:\s]+(.+?)(?=\n\n|\{|$)/i);
-    if (textMatch) {
-      return {
-        rawIngredientsText: textMatch[1].trim(),
-        ingredientsList: [],
-        eNumbers: [],
-        allergens: [],
-        artificialAdditives: [],
-        isPartiallyVisible: true,
-        ingredientsCount: 0,
-      };
-    }
-    return null;
-  } catch (err) {
-    console.error('[extractIngredientsList] Error:', err.message);
+    console.error('[extractOCRData] Error:', err.message);
     return null;
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STEP 2c — OCR: EXTRACT NUTRITION TABLE
+// STAGE 3 — BUILD ANALYSIS PROMPT (sent to text model)
 // ─────────────────────────────────────────────────────────────────────────────
-async function extractNutritionTable(imagePath) {
-  try {
-    const rawText = await analyzeImage(
-      imagePath,
-      `You are a precision OCR system for nutrition labels.
-
-Extract the nutrition facts table from this image with 100% numeric accuracy.
-
-Extract in order:
-1. Brand name and product name
-2. Serving size (with weight/volume)
-3. Servings per container
-4. Every row: nutrient name | value per serving | value per 100g | % RDA
-5. Column headers (per serving vs per 100g)
-6. Health claims (High Protein, Low Fat, No Added Sugar, etc.)
-
-Preserve exact numbers and units. Transcribe verbatim.`,
-      { temperature: 0.1 }
-    );
-    return rawText.trim();
-  } catch (err) {
-    console.error('[extractNutritionTable] Error:', err.message);
-    return null;
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// STEP 2 — ORCHESTRATE PACKAGED FOOD OCR
-// ─────────────────────────────────────────────────────────────────────────────
-async function extractPackagedFoodData(imagePath) {
-  // For packaged food, Spoonacular's analyze endpoint already provides nutrition estimates.
-  try {
-    const result = await spoonacular.analyzeImageFile(imagePath);
-    const nutrition = result.nutrition || null;
-    const label = result.category && result.category.name ? result.category.name : null;
-    // Spoonacular does not return raw ingredient list; keep existing OCR fallback if needed.
-    const surfaces = await detectPackagingTextSurfaces(imagePath);
-    const ingredientsData = surfaces.hasIngredientsList ? await extractIngredientsList(imagePath) : null;
-    return {
-      nutritionText: nutrition ? JSON.stringify(nutrition) : null,
-      ingredientsData,
-      surfaces,
-    };
-  } catch (err) {
-    console.error('[extractPackagedFoodData] Spoonacular error:', err.message);
-    // Fallback to original OCR approach.
-    const surfaces = await detectPackagingTextSurfaces(imagePath);
-    const tasks = [];
-    if (surfaces.hasNutritionTable || surfaces.hasServingInfo) {
-      tasks.push(extractNutritionTable(imagePath).catch(e => null));
-    } else {
-      tasks.push(Promise.resolve(null));
-    }
-    if (surfaces.hasIngredientsList) {
-      tasks.push(extractIngredientsList(imagePath).catch(e => null));
-    } else {
-      tasks.push(Promise.resolve(null));
-    }
-    const [nutritionText, ingredientsData] = await Promise.all(tasks);
-    return { nutritionText, ingredientsData, surfaces };
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// STEP 3 — BUILD ANALYSIS PROMPT (category-specific)
-// ─────────────────────────────────────────────────────────────────────────────
-function buildAnalysisPrompt(label, category, userCtx, rawLabelText, prepContext = {}, ingredientsData = null) {
+function buildAnalysisPrompt(label, category, userCtx, ocrData, prepContext) {
   const base = userCtx || '';
-
-  // Build the item reference
-  let itemRef;
-  if (ingredientsData && ingredientsData.rawIngredientsText) {
-    const nutritionSection = rawLabelText
-      ? `Nutrition table:\n"""\n${rawLabelText}\n"""`
-      : `(Nutrition table not visible in image)`;
-    const ingredientsSection =
-      `Ingredients list (verbatim from pack):\n"""\n${ingredientsData.rawIngredientsText}\n"""`;
-    const additivesSection = ingredientsData.eNumbers?.length
-      ? `\nDetected E-numbers/additives: ${ingredientsData.eNumbers.join(', ')}`
-      : '';
-    const allergenSection = ingredientsData.allergens?.length
-      ? `\nDeclared allergens: ${ingredientsData.allergens.join(', ')}`
-      : '';
-    itemRef =
-      `Product: "${label}"\n\n` +
-      `${nutritionSection}\n\n` +
-      `${ingredientsSection}` +
-      additivesSection +
-      allergenSection;
-  } else if (rawLabelText) {
-    itemRef = `Extracted label text:\n"""\n${rawLabelText}\n"""\nProduct: "${label}"`;
-  } else {
-    itemRef = `Item: "${label}"`;
-  }
-
-  // Prep context line (food only)
-  const prepLine = (prepContext.method && prepContext.method !== 'unknown')
-    ? `\nPreparation: ${prepContext.method}. Estimated portion: ${prepContext.portionSize || 'medium'}.`
-    : '';
-
-  // Dynamic isBeneficialForUser instruction
   const allergies = prepContext.allergies || 'None';
   const diseases = prepContext.diseases || 'None';
-  const beneficialInstruction =
-    `Set "isBeneficialForUser" to false if this item conflicts with user allergies (${allergies}) ` +
-    `or medical conditions (${diseases}). Otherwise set to true.`;
+
+  // Build item reference
+  let itemRef = `Item: "${label}"`;
+  if (ocrData) {
+    if (category === 'packaged_food' && ocrData.rawIngredientsText) {
+      itemRef = `Product: "${ocrData.brandName || ''} ${ocrData.productName || label}"\nIngredients from label: ${ocrData.rawIngredientsText}\nNutrition per 100g: ${JSON.stringify(ocrData.nutritionPer100g || {})}`;
+    } else if (category === 'medicine') {
+      itemRef = `Medicine: "${ocrData.brandName || label}" ${ocrData.drugName || ''} ${ocrData.strength || ''}\nActive: ${JSON.stringify(ocrData.activeIngredients || [])}`;
+    } else if (category === 'skincare') {
+      itemRef = `Product: "${ocrData.brandName || ''} ${ocrData.productName || label}"\nIngredients: ${JSON.stringify(ocrData.keyIngredients || [])}`;
+    }
+  }
+
+  const prepLine = (prepContext.method && prepContext.method !== 'unknown')
+    ? `\nPreparation: ${prepContext.method}. Portion: ${prepContext.portionSize || 'medium'}.` : '';
+
+  // Personalized fields that go in ALL category prompts
+  const personalFields = '"personalWarnings":["Specific warning for THIS user based on their health report"],' +
+    '"ingredientRisks":[{"ingredient":"ingredient name","risk":"why bad for this user","condition":"which condition it affects"}],' +
+    '"homemadeVersion":"How to make a healthier version at home with specific recipe tips",' +
+    '"closestHealthyAlternative":"Specific similar dish/product that is healthier for this user",';
 
   // ── MEDICINE ──
   if (category === 'medicine') {
-    return (
-      base + itemRef + `\n\n` +
-      `You are a qualified pharmacist with clinical expertise. ` +
-      `Provide a comprehensive, accurate overview of this medicine or supplement. ` +
-      `Use REAL pharmacological data. Always recommend consulting a doctor.\n` +
-      `${beneficialInstruction}\n\n` +
-      `Return ONLY valid JSON — no markdown, no explanation:\n` +
-      `{\n` +
-      `  "product": "${label}",\n` +
-      `  "category": "medicine",\n` +
-      `  "productDescription": "Clear explanation of what this medicine is, its drug class, and primary therapeutic purpose.",\n` +
-      `  "activeIngredients": ["Active ingredient 1 with strength", "Active ingredient 2"],\n` +
-      `  "basicNutrients": { "calories": 0, "protein_g": 0, "fat_g": 0, "carbs_g": 0 },\n` +
-      `  "basicUse": "Standard dosage instructions, when to take (before/after food), frequency, and typical course duration.",\n` +
-      `  "type": "medicine",\n` +
-      `  "positives": ["Therapeutic benefit 1", "benefit 2", "benefit 3"],\n` +
-      `  "negatives": ["Common side effect 1", "serious warning 1", "contraindication 1"],\n` +
-      `  "verdict": "consult_doctor",\n` +
-      `  "uses": ["Primary indication 1", "Secondary indication 2"],\n` +
-      `  "isBeneficialForUser": true,\n` +
-      `  "medicalAlternatives": ["Generic alternative 1", "Natural supplement if applicable"],\n` +
-      `  "recommendedFor": ["Condition 1", "Condition 2"],\n` +
-      `  "avoidFor": ["Pregnant women", "Children under X", "Specific condition"],\n` +
-      `  "doctorAdvice": "Always consult a licensed medical professional before starting, stopping, or changing any medication.",\n` +
-      `  "storageInstructions": "Specific temperature range, light exposure, and humidity requirements.",\n` +
-      `  "alternatives": ["OTC alternative 1", "Natural supplement 1", "Lifestyle intervention 1", "Herbal alternative 1"]\n` +
-      `}`
-    );
+    return base + itemRef + '\n\n' +
+      'You are a pharmacist. Provide accurate info. Recommend consulting a doctor.\n' +
+      `User allergies: ${allergies}. Conditions: ${diseases}. Set isBeneficialForUser to false if conflicts exist.\n\n` +
+      'Return ONLY valid JSON:\n' +
+      '{"product":"name","category":"medicine","productDescription":"what this medicine is and does",' +
+      '"activeIngredients":["ingredient with strength"],"basicNutrients":{"calories":0,"protein_g":0,"fat_g":0,"carbs_g":0},' +
+      '"basicUse":"dosage and when to take","type":"medicine",' +
+      '"positives":["benefit1","benefit2","benefit3"],"negatives":["side effect1","warning1"],' +
+      '"verdict":"consult_doctor","uses":["indication1","indication2"],' +
+      personalFields +
+      '"isBeneficialForUser":true,"medicalAlternatives":["alternative1"],' +
+      '"recommendedFor":["condition1"],"avoidFor":["group1"],' +
+      '"doctorAdvice":"Always consult a doctor.","storageInstructions":"storage info",' +
+      '"alternatives":["otc alternative","natural supplement"]}';
   }
 
   // ── SKINCARE ──
   if (category === 'skincare') {
-    return (
-      base + itemRef + `\n\n` +
-      `You are a board-certified dermatologist with expertise in cosmetic formulations. ` +
-      `Provide a thorough, evidence-based analysis of this skincare product.\n` +
-      `${beneficialInstruction}\n\n` +
-      `Return ONLY valid JSON — no markdown, no explanation:\n` +
-      `{\n` +
-      `  "product": "${label}",\n` +
-      `  "category": "skincare",\n` +
-      `  "productDescription": "What this product does, which skin concern it targets, and how it works at a skin-biology level.",\n` +
-      `  "keyIngredients": ["Ingredient 1 — its specific skin benefit", "Ingredient 2 — its benefit"],\n` +
-      `  "basicNutrients": { "calories": 0, "protein_g": 0, "fat_g": 0, "carbs_g": 0 },\n` +
-      `  "basicUse": "Step-by-step application: when (AM/PM), how much, technique, what to apply before/after.",\n` +
-      `  "type": "skincare",\n` +
-      `  "positives": ["Clinically proven benefit 1", "benefit 2", "benefit 3"],\n` +
-      `  "negatives": ["Potential irritant (specific ingredient)", "overuse risk", "incompatible ingredient"],\n` +
-      `  "verdict": "beneficial",\n` +
-      `  "uses": ["Hydration", "UV protection", "Anti-aging"],\n` +
-      `  "isBeneficialForUser": true,\n` +
-      `  "suitableForSkinTypes": ["Oily", "Dry", "Combination", "Normal", "Sensitive"],\n` +
-      `  "avoidFor": ["Specific skin condition", "Ingredient sensitivity"],\n` +
-      `  "applicationTips": "Best layering order in routine, frequency, patch test advice, SPF pairing if relevant.",\n` +
-      `  "medicalAlternatives": [],\n` +
-      `  "alternatives": ["Budget dupe with same actives", "Natural/DIY alternative", "Premium upgrade", "Dermatologist-recommended brand"]\n` +
-      `}`
-    );
+    return base + itemRef + '\n\n' +
+      'You are a dermatologist. Provide evidence-based analysis.\n' +
+      `User allergies: ${allergies}. Conditions: ${diseases}. Set isBeneficialForUser accordingly.\n\n` +
+      'Return ONLY valid JSON:\n' +
+      '{"product":"name","category":"skincare","productDescription":"what this product does",' +
+      '"keyIngredients":["ingredient — benefit"],"basicNutrients":{"calories":0,"protein_g":0,"fat_g":0,"carbs_g":0},' +
+      '"basicUse":"how and when to apply","type":"skincare",' +
+      '"positives":["benefit1","benefit2"],"negatives":["concern1"],' +
+      '"verdict":"beneficial","uses":["purpose1","purpose2"],' +
+      personalFields +
+      '"isBeneficialForUser":true,"suitableForSkinTypes":["Oily","Dry","Normal","Sensitive"],' +
+      '"avoidFor":["condition1"],"applicationTips":"usage tips",' +
+      '"medicalAlternatives":[],"alternatives":["alternative1","alternative2"]}';
   }
 
+  // ── FOOD / BEVERAGE / PACKAGED FOOD ──
   const isPackaged = category === 'packaged_food';
 
-  // Build ingredient-aware instruction block for packaged food
-  const ingredientAnalysisBlock = (isPackaged && ingredientsData)
-    ? `\nINGREDIENT ANALYSIS REQUIREMENTS:
-- Analyse EVERY ingredient in the list for its health impact
-- Flag any of these red-flag ingredients if present: MSG (E621), Sodium Benzoate (E211), BHA/BHT (E320/E321), TBHQ (E319), Carrageenan (E407), High Fructose Corn Syrup, Partially Hydrogenated Oil (trans fat), Artificial colours (E102, E110, E122, E124, E129), Aspartame (E951), Acesulfame-K (E950), Maida/Refined flour, Palm oil
-- For each red-flag found, explain WHY it is concerning in the "negatives" array
-- Check if ingredients are listed in descending order by weight (first ingredient = highest quantity)
-- Note if sugar, salt, or refined flour appears in the top 3 ingredients (a warning sign)
-- Identify any allergen-containing ingredients even if not declared separately
-- Count total ingredients — more than 15 usually signals high processing
-`
-    : '';
+  let ingredientBlock = '';
+  if (isPackaged && ocrData) {
+    ingredientBlock = `\nAnalyse every ingredient. Flag these if present: MSG (E621), Sodium Benzoate, BHA/BHT, TBHQ, HFCS, Partially Hydrogenated Oil, Artificial colours, Aspartame, Maida, Palm oil. Explain why each flagged ingredient is bad in "negatives".\n`;
+  }
 
-  return (
-    base + itemRef + prepLine + `\n\n` +
+  return base + itemRef + prepLine + '\n\n' +
     (isPackaged
-      ? `You are a senior clinical dietitian specialising in packaged and ultra-processed foods. ` +
-      `Use the extracted label text AND ingredients list for PRECISE analysis — do not estimate, use exact data from the label. ` +
-      `Identify all additives, preservatives, artificial colours/flavours, and ultra-processing markers. ` +
-      `Apply NOVA food classification (1-4).\n`
-      : `You are a senior clinical dietitian with deep expertise in Indian and global cuisine. ` +
-      `Provide REAL, ACCURATE nutritional values — use standard food composition databases (ICMR, USDA). ` +
-      `Account for the preparation method when calculating calories and fat content. ` +
-      `For Indian dishes, suggest genuinely healthier Indian alternatives (not just generic "salad").\n`
+      ? 'You are a dietitian for packaged foods. Use the label data for precise analysis. Apply NOVA classification (1-4).\n'
+      : 'You are a dietitian expert in Indian and global cuisine. Use real nutritional values from ICMR/USDA. For Indian food suggest Indian alternatives, not generic salad.\n'
     ) +
-    ingredientAnalysisBlock +
-    `${beneficialInstruction}\n\n` +
-    `Return ONLY valid JSON — no markdown, no explanation, no placeholder text. Use real numbers:\n` +
-    `{\n` +
-    `  "product": "${label}",\n` +
-    `  "category": "${category}",\n` +
-    `  "productDescription": "Rich description including cooking method, key ingredients, cultural context, and what makes it distinctive.",\n` +
-    `  "basicNutrients": { "calories": 0, "protein_g": 0, "fat_g": 0, "carbs_g": 0, "fibre_g": 0, "sugar_g": 0, "sodium_mg": 0 },\n` +
-    `  "vitaminsAndMinerals": ["Specific vitamin/mineral with approximate % RDA if known"],\n` +
-    `  "basicUse": "Best time to eat, ideal pairing, portion guidance.",\n` +
-    `  "type": "${category}",\n` +
-    (isPackaged
-      ? `  "additives": ["Additive name (E-number) — health concern or function"],\n` +
-      `  "redFlagIngredients": ["Ingredient name — why it is concerning"],\n` +
-      `  "topIngredients": ["First ingredient (most by weight)", "Second", "Third"],\n` +
-      `  "allergens": ["Declared allergen 1", "Undeclared but present allergen"],\n` +
-      `  "totalIngredientCount": 0,\n` +
-      `  "processingLevel": "NOVA Group X — reason (e.g. NOVA 4: contains emulsifiers, artificial flavour, preservatives)",\n`
-      : ''
-    ) +
-    `  "positives": ["Specific health benefit with reason", "benefit 2", "benefit 3"],\n` +
-    `  "negatives": ["Specific drawback with reason — cite the actual ingredient causing it", "drawback 2"],\n` +
-    `  "verdict": "healthy | neutral | unhealthy",\n` +
-    `  "uses": ["Energy", "Muscle repair", "Bone health"],\n` +
-    `  "isBeneficialForUser": true,\n` +
-    `  "medicalAlternatives": [],\n` +
-    `  "recommendedFor": ["Specific group with reason"],\n` +
-    `  "avoidFor": ["Specific group with reason — e.g. diabetics due to high GI"],\n` +
-    `  "servingSuggestion": "Specific portion size in grams or cups, best time of day, pairing tips.",\n` +
-    `  "alternatives": ["Specific healthier Indian alternative", "Specific lighter version", "Homemade version tip", "Nutrient-equivalent healthy swap"]\n` +
-    `}`
-  );
+    ingredientBlock +
+    `User allergies: ${allergies}. Conditions: ${diseases}. Set isBeneficialForUser accordingly.\n` +
+    'Based on the user health report, provide SPECIFIC personalWarnings (e.g. "Your fasting sugar is 180mg/dL - this dish has 30g sugar which will spike your blood glucose").\n' +
+    'List ingredientRisks mapping each risky ingredient to the user condition it affects.\n' +
+    'Suggest a homemadeVersion with specific healthier substitutions.\n' +
+    'Suggest closestHealthyAlternative - a real similar dish that is better for this user.\n\n' +
+    'Return ONLY valid JSON with real numbers:\n' +
+    '{"product":"' + label + '","category":"' + category + '",' +
+    '"productDescription":"description with cooking method, ingredients, cultural context",' +
+    '"basicNutrients":{"calories":0,"protein_g":0,"fat_g":0,"carbs_g":0,"fibre_g":0,"sugar_g":0,"sodium_mg":0},' +
+    '"vitaminsAndMinerals":["vitamin/mineral with % RDA"],' +
+    '"basicUse":"best time to eat, portion guidance",' +
+    '"type":"' + category + '",' +
+    (isPackaged ? '"additives":["additive — concern"],"redFlagIngredients":["ingredient — why bad"],"topIngredients":["first","second","third"],"allergens":["allergen"],"totalIngredientCount":0,"processingLevel":"NOVA Group X — reason",' : '') +
+    '"positives":["specific benefit with reason","benefit2","benefit3"],' +
+    '"negatives":["specific concern with reason","concern2"],' +
+    '"verdict":"healthy or neutral or unhealthy",' +
+    '"uses":["Energy","Muscle repair"],' +
+    personalFields +
+    '"isBeneficialForUser":true,"medicalAlternatives":[],' +
+    '"recommendedFor":["group with reason"],' +
+    '"avoidFor":["group with reason"],' +
+    '"servingSuggestion":"portion size, best time, pairing tips",' +
+    '"alternatives":["healthier Indian alternative","lighter version","homemade tip","nutrient swap"]}';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -501,25 +227,21 @@ function buildAnalysisPrompt(label, category, userCtx, rawLabelText, prepContext
 async function identifyImage(req, res) {
   console.log('[POST /api/identify] Handler started');
 
-  // ── Load user profile ──
+  // ── Load user profile + health report ──
   if (req.user) {
     try {
       const u = await Information.findOne({ authId: req.user }).lean();
       if (u) {
         req.userInfo = {
-          fullName: u.fullName,
-          dob: u.dateOfBirth,
-          gender: u.gender,
-          height: u.heightCm,
-          weight: u.weightKg,
-          purpose: u.purposes,
-          allergies: u.allergies || [],
-          diseases: u.diseases || [],
+          fullName: u.fullName, dob: u.dateOfBirth, gender: u.gender,
+          height: u.heightCm, weight: u.weightKg, purpose: u.purposes,
+          allergies: u.allergies || [], diseases: u.diseases || [],
           dietPreference: u.dietPreference,
+          healthReport: u.healthReport || null,
         };
       }
     } catch (dbErr) {
-      console.error('[identify] DB error loading user profile:', dbErr.message);
+      console.error('[identify] DB error:', dbErr.message);
     }
   }
 
@@ -531,151 +253,182 @@ async function identifyImage(req, res) {
 
   try {
     const originalPath = path.resolve(req.file.path);
-
-    // ── PREPROCESS IMAGE ──
     console.log('[identify] Preprocessing image...');
     processedPath = await preprocessImage(originalPath);
     const imagePath = processedPath;
 
-    // ── Build user context string ──
+    // ── Build user context with health report ──
     const ui = req.userInfo;
-    const allergiesStr = ui ? ((ui.allergies.length ? ui.allergies.join(', ') : 'None')) : 'None';
-    const diseasesStr = ui ? ((ui.diseases.length ? ui.diseases.join(', ') : 'None')) : 'None';
+    const allergiesStr = ui ? (ui.allergies.length ? ui.allergies.join(', ') : 'None') : 'None';
+    const diseasesStr = ui ? (ui.diseases.length ? ui.diseases.join(', ') : 'None') : 'None';
+    const dietHint = ui?.dietPreference ? `Diet: ${ui.dietPreference}.\n` : '';
 
-    const dietHint = ui?.dietPreference
-      ? `User follows a ${ui.dietPreference} diet. Tailor all recommendations accordingly.\n`
-      : '';
+    // Build health report context for personalized analysis
+    let healthCtx = '';
+    if (ui?.healthReport) {
+      const hr = ui.healthReport;
+      const parts = [];
+      if (hr.bloodSugar?.fasting) parts.push(`Blood Sugar: Fasting=${hr.bloodSugar.fasting}mg/dL, HbA1c=${hr.bloodSugar.hba1c || 'N/A'}% (${hr.bloodSugar.status || 'unknown'})`);
+      if (hr.cholesterol?.total) parts.push(`Cholesterol: Total=${hr.cholesterol.total}, HDL=${hr.cholesterol.hdl}, LDL=${hr.cholesterol.ldl}, Triglycerides=${hr.cholesterol.triglycerides} (${hr.cholesterol.status || 'unknown'})`);
+      if (hr.bloodPressure?.systolic) parts.push(`BP: ${hr.bloodPressure.systolic}/${hr.bloodPressure.diastolic} (${hr.bloodPressure.status || 'unknown'})`);
+      if (hr.hemoglobin?.value) parts.push(`Hemoglobin: ${hr.hemoglobin.value} (${hr.hemoglobin.status || 'unknown'})`);
+      if (hr.thyroid?.tsh) parts.push(`Thyroid TSH: ${hr.thyroid.tsh} (${hr.thyroid.status || 'unknown'})`);
+      if (hr.kidneyFunction?.creatinine) parts.push(`Creatinine: ${hr.kidneyFunction.creatinine} (${hr.kidneyFunction.status || 'unknown'})`);
+      if (hr.liverFunction?.sgot) parts.push(`Liver: SGOT=${hr.liverFunction.sgot}, SGPT=${hr.liverFunction.sgpt} (${hr.liverFunction.status || 'unknown'})`);
+      if (hr.vitamins?.d) parts.push(`Vit D: ${hr.vitamins.d}, B12: ${hr.vitamins.b12}`);
+      if (hr.riskFactors?.length) parts.push(`RISK FACTORS: ${hr.riskFactors.join(', ')}`);
+      if (hr.dietaryRestrictions?.length) parts.push(`DIETARY RESTRICTIONS: ${hr.dietaryRestrictions.join(', ')}`);
+      if (parts.length) healthCtx = `\nHEALTH REPORT (from lab tests):\n${parts.join('\n')}\n`;
+    }
 
     const userCtx = ui
-      ? `User profile:\n` +
-      `Name: ${ui.fullName} | Gender: ${ui.gender} | Height: ${ui.height}cm | Weight: ${ui.weight}kg\n` +
-      `Health Goal: ${ui.purpose} | Diet: ${ui.dietPreference || 'No preference'}\n` +
-      `Allergies: ${allergiesStr}\n` +
-      `Medical Conditions: ${diseasesStr}\n` +
-      `${dietHint}` +
-      `IMPORTANT: Flag any conflicts with the user's allergies or medical conditions in "negatives" and set "isBeneficialForUser" accordingly.\n\n`
+      ? `User: ${ui.fullName} | ${ui.gender} | ${ui.height}cm/${ui.weight}kg\n` +
+        `Goal: ${ui.purpose} | ${dietHint}` +
+        `Allergies: ${allergiesStr} | Conditions: ${diseasesStr}\n` +
+        healthCtx +
+        `IMPORTANT: Provide personalWarnings specific to this user's health report. Flag ingredient-level risks. Set isBeneficialForUser accordingly.\n\n`
       : '';
 
-    // ── STEP 1a: CLASSIFY (single focused call) ──
-    console.log('[identify] Step 1a: Classifying image...');
-    const category = await classifyImage(imagePath);
-    console.log(`[identify] Category: ${category}`);
+    // ── STAGE 1: CLASSIFY + IDENTIFY ──
+    console.log('[identify] Stage 1: Classify + Identify...');
+    let result = await classifyAndIdentify(imagePath);
+    let { category, label, confidence, hasText, prepMethod, portionSize } = result;
+    console.log(`[identify] -> Category: ${category} | Label: "${label}" | Confidence: ${confidence}`);
 
-    // ── Graceful rejection ──
+    // Rejection
     if (category === 'rejected') {
-      console.warn('[identify] Non-applicable item. Sending graceful rejection.');
       return res.status(200).json({
-        rejected: true,
-        detections: [],
-        analysis: null,
-        userMessage: "😊 This doesn't look like something I can analyse! EatiT is designed for food, beverages, medicines, and skincare products. Please try scanning a food dish, a packaged product, a medicine, or a skincare item.",
-        suggestion: "Try scanning: a meal, a packaged snack, a medicine strip, a supplement bottle, or a skincare cream.",
+        rejected: true, detections: [], analysis: null,
+        userMessage: "😊 This doesn't look like food, medicine, or skincare. Try scanning a dish, packaged snack, medicine strip, or skincare product!",
+        suggestion: "Try: a meal plate, a chips packet, a medicine strip, or a face cream.",
       });
     }
 
-    // ── STEP 1b: IDENTIFY (category-aware focused call) ──
-    console.log('[identify] Step 1b: Identifying item...');
-    let { label, confidence, prepMethod, portionSize } = await identifyItem(imagePath, category);
-    console.log(`[identify] Label: "${label}" | Confidence: ${confidence}`);
-
-    // ── STEP 1c: RE-IDENTIFY if label is missing or vague ──
-    const isBadLabel = !label
-      || label.length < 2
-      || label.length > 110
-      || /^(unknown|null|undefined|none|n\/a|food item|a food|the food|some food|an? (dish|item|product|snack|drink|beverage|food|indian|chinese|western|meal|curry|rice|bread)$)/i.test(label);
-
-    if (isBadLabel || confidence === 'low') {
-      console.log('[identify] Step 1c: Re-identifying with ultra-simple prompt...');
+    // Re-identify if label missing or vague
+    if (!label || label.length < 2 || confidence === 'low') {
+      console.log('[identify] Stage 1b: Re-identifying...');
       const retryLabel = await reIdentify(imagePath, category);
-      if (retryLabel && retryLabel.length >= 2) {
-        label = retryLabel;
-        confidence = 'medium';
-        console.log(`[identify] Re-identified as: "${label}"`);
-      }
+      if (retryLabel) { label = retryLabel; confidence = 'medium'; }
     }
 
-    // Final safety net
+    // Final fallback label
+    const defaults = { food: 'Food Dish', beverage: 'Beverage', medicine: 'Medicine', skincare: 'Skincare Product', packaged_food: 'Packaged Food' };
     if (!label || label.length < 2) {
-      label = DEFAULT_LABELS[category] || 'Food Item';
+      label = defaults[category] || 'Food Item';
       console.warn('[identify] Using default label:', label);
     }
 
-    let effectiveCategory = category;
-    let rawLabelText = null;
-    let ingredientsData = null;
+    // ── STAGE 2: OCR (for packaged_food, medicine, skincare) ──
+    let ocrData = null;
+    const needsOCR = ['packaged_food', 'medicine', 'skincare'].includes(category);
 
-    // ── STEP 2: Deep OCR for packaged food ──
-    if (category === 'packaged_food') {
-      console.log('[identify] Step 2: Extracting packaged food data (nutrition + ingredients)...');
-      const packagedData = await extractPackagedFoodData(imagePath);
-
-      rawLabelText = packagedData.nutritionText || null;
-      ingredientsData = packagedData.ingredientsData || null;
-
-      if (rawLabelText || ingredientsData) {
-        effectiveCategory = 'packaged_food';
-        console.log(`[identify] Packaged data: nutrition=${!!rawLabelText} | ingredients=${!!ingredientsData} | count=${ingredientsData?.ingredientsCount || 0}`);
+    if (needsOCR) {
+      console.log(`[identify] Stage 2: OCR for ${category}...`);
+      ocrData = await extractOCRData(imagePath, category);
+      if (ocrData) {
+        // Improve label from OCR
+        if (category === 'packaged_food' && ocrData.brandName && ocrData.productName) {
+          label = `${ocrData.brandName} ${ocrData.productName}`.trim();
+        } else if (category === 'medicine' && ocrData.brandName) {
+          label = ocrData.strength ? `${ocrData.brandName} ${ocrData.strength}` : ocrData.brandName;
+        } else if (category === 'skincare' && ocrData.brandName) {
+          label = `${ocrData.brandName} ${ocrData.productName || ''}`.trim();
+        }
+        console.log(`[identify] OCR label: "${label}"`);
+      }
+    } else if (hasText) {
+      // Food/beverage with visible text — might be packaged
+      console.log('[identify] Food with text detected — running OCR check...');
+      const check = await extractOCRData(imagePath, 'packaged_food');
+      if (check && check.brandName && check.rawIngredientsText) {
+        category = 'packaged_food';
+        ocrData = check;
+        label = `${check.brandName} ${check.productName || ''}`.trim();
+        console.log(`[identify] Reclassified as packaged_food: "${label}"`);
       }
     }
 
-    const detections = [{ label, category: effectiveCategory }];
+    const detections = [{ label, category }];
 
-    // ── STEP 3: Deep analysis ──
-    console.log(`[identify] Step 3: Analysing "${label}" | Category: ${effectiveCategory}`);
-
-    const prepContext = {
-      method: prepMethod,
-      portionSize,
-      allergies: allergiesStr,
-      diseases: diseasesStr,
-    };
-
-    const analysisPrompt = buildAnalysisPrompt(label, effectiveCategory, userCtx, rawLabelText, prepContext, ingredientsData);
+    // ── STAGE 3: DEEP ANALYSIS ──
+    console.log(`[identify] Stage 3: Analysing "${label}" (${category})...`);
+    const prepContext = { method: prepMethod, portionSize, allergies: allergiesStr, diseases: diseasesStr };
+    const analysisPrompt = buildAnalysisPrompt(label, category, userCtx, ocrData, prepContext);
 
     const systemPrompts = {
-      medicine: 'You are a qualified pharmacist and clinical pharmacologist. Respond ONLY with valid JSON. Always include a doctor consultation disclaimer. Use real pharmacological data.',
-      skincare: 'You are a board-certified dermatologist with cosmetic formulation expertise. Respond ONLY with valid JSON. Use evidence-based dermatological knowledge.',
-      packaged_food: 'You are a clinical dietitian specialising in packaged and ultra-processed foods. Respond ONLY with valid JSON. Extract precise nutritional values from the provided label text. Apply NOVA classification.',
-      food: 'You are a senior clinical dietitian with deep expertise in Indian and global cuisine. Respond ONLY with valid JSON. Use real nutritional values from ICMR/USDA databases. Account for cooking method in calorie estimates.',
-      beverage: 'You are a senior clinical dietitian and beverage nutrition specialist. Respond ONLY with valid JSON. Provide accurate hydration, sugar, and calorie data.',
+      medicine: 'You are a pharmacist. Respond ONLY with valid JSON. Use real pharmacological data. Include doctor consultation advice.',
+      skincare: 'You are a dermatologist. Respond ONLY with valid JSON. Use evidence-based knowledge.',
+      packaged_food: 'You are a dietitian for packaged foods. Respond ONLY with valid JSON. Use label data for precise values.',
+      food: 'You are a dietitian expert in Indian and global cuisine. Respond ONLY with valid JSON. Use ICMR/USDA data.',
+      beverage: 'You are a nutrition specialist. Respond ONLY with valid JSON.',
     };
 
     const analysisResp = await generateText(analysisPrompt, {
-      system: systemPrompts[effectiveCategory] || systemPrompts.food,
+      system: systemPrompts[category] || systemPrompts.food,
       json: true,
       temperature: 0.3,
     });
 
     let analysis = extractJSON(analysisResp, false) || {};
-    analysis.category = effectiveCategory;
+    analysis.category = category;
 
-    // Placeholder for future Amazon + YouTube enrichment
-    analysis.amazonProducts = [];
-    analysis.youtubeRecipes = [];
+    // ── STAGE 4: FETCH YOUTUBE RECIPES & AMAZON PRODUCTS ──
+    // Only for food/beverage/packaged_food categories
+    if (['food', 'beverage', 'packaged_food'].includes(category)) {
+      const alternatives = Array.isArray(analysis.alternatives) ? analysis.alternatives : [];
+      // Use the product label + alternatives for fetching external data
+      const searchTerms = [label, ...alternatives].slice(0, 4);
 
-    console.log(`[identify] ✅ Analysis complete for: "${label}"`);
+      console.log(`[identify] Stage 4: Fetching YouTube/Amazon for:`, searchTerms);
 
-    // ── RESPOND ──
+      try {
+        const [youtubeResults, amazonResults] = await Promise.all([
+          Promise.all(searchTerms.map(term => fetchTopYouTubeRecipe(term).catch(() => null))),
+          Promise.all(searchTerms.map(term => fetchTopAmazonProduct(term).catch(() => null))),
+        ]);
+
+        analysis.youtubeRecipes = youtubeResults.filter(Boolean);
+        analysis.amazonProducts = amazonResults.filter(Boolean);
+        console.log(`[identify] Got ${analysis.youtubeRecipes.length} YouTube videos, ${analysis.amazonProducts.length} Amazon products`);
+      } catch (extErr) {
+        console.error('[identify] External API error (non-fatal):', extErr.message);
+        analysis.youtubeRecipes = [];
+        analysis.amazonProducts = [];
+      }
+    } else {
+      analysis.amazonProducts = [];
+      analysis.youtubeRecipes = [];
+    }
+
+    console.log(`[identify] ✅ Done: "${label}"`);
+
+    // ── Build rawLabelText for frontend display ──
+    let rawLabelText = null;
+    if (ocrData) {
+      if (category === 'packaged_food' && ocrData.rawIngredientsText) {
+        rawLabelText = `Brand: ${ocrData.brandName || 'Unknown'}\nProduct: ${ocrData.productName || label}\n\nIngredients:\n${ocrData.rawIngredientsText}`;
+        if (ocrData.nutritionPer100g) rawLabelText += `\n\nNutrition per 100g:\n${JSON.stringify(ocrData.nutritionPer100g, null, 2)}`;
+      } else if (category === 'medicine') {
+        rawLabelText = `Drug: ${ocrData.brandName || label}\nGeneric: ${ocrData.drugName || 'N/A'}\nStrength: ${ocrData.strength || 'N/A'}\nManufacturer: ${ocrData.manufacturer || 'N/A'}`;
+        if (ocrData.activeIngredients?.length) rawLabelText += `\nActive: ${ocrData.activeIngredients.join(', ')}`;
+      } else if (category === 'skincare') {
+        rawLabelText = `Brand: ${ocrData.brandName || 'Unknown'}\nProduct: ${ocrData.productName || label}`;
+        if (ocrData.keyIngredients?.length) rawLabelText += `\nKey Ingredients: ${ocrData.keyIngredients.join(', ')}`;
+      }
+    }
+
     return res.json({
-      rejected: false,
-      detections,
-      analysis,
-      category: effectiveCategory,
+      rejected: false, detections, analysis, category,
       ...(rawLabelText && { rawLabelText }),
-      ...(ingredientsData && { ingredientsData }),
+      ...(ocrData && { ocrData }),
     });
 
   } catch (err) {
-    console.error('[POST /api/identify] Uncaught error:', err);
+    console.error('[POST /api/identify] Error:', err);
     return res.status(500).json({ error: 'Server error', details: err.message });
   } finally {
-    // Clean up image files
-    if (req.file) {
-      fs.unlink(req.file.path, () => {});
-    }
-    if (processedPath) {
-      cleanupProcessed(processedPath, req.file?.path ? path.resolve(req.file.path) : null);
-    }
+    if (req.file) fs.unlink(req.file.path, () => {});
+    if (processedPath) cleanupProcessed(processedPath, req.file?.path ? path.resolve(req.file.path) : null);
   }
 }
 

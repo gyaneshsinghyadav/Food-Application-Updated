@@ -2,7 +2,12 @@ const jwt = require("jsonwebtoken");
 
 const isAuthenticated = async (req, res, next) => {
     try {
-        const token = req.cookies.token;
+        let token = req.cookies.token;
+        
+        // Check Authorization header if cookie is not present
+        if (!token && req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+            token = req.headers.authorization.split(' ')[1];
+        }
         
         // If token is not found
         if (!token) {
@@ -40,7 +45,13 @@ const isAuthenticated = async (req, res, next) => {
 
 const optionalAuth = async (req, res, next) => {
     try {
-        const token = req.cookies.token;
+        let token = req.cookies.token;
+        
+        // Check Authorization header if cookie is not present
+        if (!token && req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+            token = req.headers.authorization.split(' ')[1];
+        }
+
         if (!token) {
             return next();
         }

@@ -1,6 +1,57 @@
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
 
+const HealthReportSchema = new Schema({
+  rawSummary: { type: String, default: '' },
+  extractedAt: { type: Date, default: Date.now },
+  bloodSugar: {
+    fasting: { type: Number, default: 0 },
+    pp: { type: Number, default: 0 },
+    hba1c: { type: Number, default: 0 },
+    status: { type: String, default: 'unknown' },
+  },
+  cholesterol: {
+    total: { type: Number, default: 0 },
+    hdl: { type: Number, default: 0 },
+    ldl: { type: Number, default: 0 },
+    triglycerides: { type: Number, default: 0 },
+    status: { type: String, default: 'unknown' },
+  },
+  bloodPressure: {
+    systolic: { type: Number, default: 0 },
+    diastolic: { type: Number, default: 0 },
+    status: { type: String, default: 'unknown' },
+  },
+  hemoglobin: {
+    value: { type: Number, default: 0 },
+    status: { type: String, default: 'unknown' },
+  },
+  thyroid: {
+    tsh: { type: Number, default: 0 },
+    t3: { type: Number, default: 0 },
+    t4: { type: Number, default: 0 },
+    status: { type: String, default: 'unknown' },
+  },
+  kidneyFunction: {
+    creatinine: { type: Number, default: 0 },
+    uricAcid: { type: Number, default: 0 },
+    bun: { type: Number, default: 0 },
+    status: { type: String, default: 'unknown' },
+  },
+  liverFunction: {
+    sgot: { type: Number, default: 0 },
+    sgpt: { type: Number, default: 0 },
+    status: { type: String, default: 'unknown' },
+  },
+  vitamins: {
+    d: { type: Number, default: 0 },
+    b12: { type: Number, default: 0 },
+    iron: { type: Number, default: 0 },
+  },
+  riskFactors: { type: [String], default: [] },
+  dietaryRestrictions: { type: [String], default: [] },
+}, { _id: false });
+
 const InformationSchema = new Schema(
   {
     fullName: {
@@ -91,12 +142,16 @@ const InformationSchema = new Schema(
       required: true,
     },
     image: { url: String, publicId: String },
-    documents: 
-      {
-        type: String,
-        uploadedAt: { type: Date, default: Date.now }
-      }
-    ,
+    // Legacy field — kept for backward compatibility
+    documents: {
+      type: String,
+      uploadedAt: { type: Date, default: Date.now }
+    },
+    // New structured health report
+    healthReport: {
+      type: HealthReportSchema,
+      default: null,
+    },
     authId: {
       type: Schema.Types.ObjectId,
       ref: "UserAuth",

@@ -20,11 +20,33 @@ import {
     Activity,
     Feather,
     ChevronDown,
-    ThumbsUp
+    ThumbsUp,
+    Bookmark,
+    BookmarkCheck,
+    Trophy,
+    TrendingUp,
+    Camera,
+    Lightbulb,
+    Flame
 } from "lucide-react";
 import axios from "axios";
 import { useUserStore } from "../store/useUserStore";
 import { useHealthProfileStore } from "../store/useUserInformationStore"
+
+// Daily health challenges pool
+const DAILY_CHALLENGES = [
+    { emoji: "🥗", text: "Eat 5 servings of fruits & vegetables today", category: "nutrition" },
+    { emoji: "💧", text: "Drink 8 glasses of water today", category: "health" },
+    { emoji: "🚶", text: "Walk 10,000 steps today", category: "exercise" },
+    { emoji: "🍳", text: "Cook a homemade protein-rich breakfast", category: "diet" },
+    { emoji: "🧘", text: "Do 15 minutes of stretching or yoga", category: "exercise" },
+    { emoji: "🥜", text: "Replace one snack with nuts or seeds", category: "nutrition" },
+    { emoji: "🫖", text: "Swap one sugary drink with green tea", category: "health" },
+    { emoji: "🥒", text: "Add a raw salad to your lunch", category: "diet" },
+    { emoji: "🏋️", text: "Do a 20-minute home workout", category: "exercise" },
+    { emoji: "😴", text: "Sleep 7+ hours tonight for recovery", category: "awareness" },
+];
+
 const Post = () => {
     const [posts, setPosts] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -38,11 +60,42 @@ const Post = () => {
     const [isCreatingPoll, setIsCreatingPoll] = useState(false);
     const fileInputRef = useRef();
     const { user } = useUserStore();
-    // Add these states in both components
     const [showSharePopup, setShowSharePopup] = useState(false);
     const [sharePostId, setSharePostId] = useState(null);
     const { profile } = useHealthProfileStore();
     const fullname = profile?.fullName;
+
+    // New community feature states
+    const [bookmarkedPosts, setBookmarkedPosts] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('eatit_bookmarks') || '[]'); } catch { return []; }
+    });
+    const [challengeCompleted, setChallengeCompleted] = useState(() => {
+        const saved = localStorage.getItem('eatit_challenge_date');
+        return saved === new Date().toDateString();
+    });
+    const [showScanShare, setShowScanShare] = useState(false);
+    const [lastScanResult, setLastScanResult] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('eatit_last_scan') || 'null'); } catch { return null; }
+    });
+
+    // Get today's challenge based on day of year
+    const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
+    const todayChallenge = DAILY_CHALLENGES[dayOfYear % DAILY_CHALLENGES.length];
+
+    const toggleBookmark = (postId) => {
+        setBookmarkedPosts(prev => {
+            const next = prev.includes(postId) ? prev.filter(id => id !== postId) : [...prev, postId];
+            localStorage.setItem('eatit_bookmarks', JSON.stringify(next));
+            toast.success(next.includes(postId) ? 'Post saved!' : 'Removed from saved');
+            return next;
+        });
+    };
+
+    const completeChallenge = () => {
+        setChallengeCompleted(true);
+        localStorage.setItem('eatit_challenge_date', new Date().toDateString());
+        toast.success('🎉 Challenge completed! Great job!');
+    };
     // Add this function in both components
     const handleShare = (postId) => {
         setSharePostId(postId);
@@ -393,6 +446,64 @@ const Post = () => {
                 <p className="text-gray-600 text-sm">Share your healthy meals, nutrition tips, and fitness journey</p>
             </div>
 
+            {/* 🏆 Daily Health Challenge */}
+            <div className={`rounded-2xl shadow-md p-5 border-l-4 transition-all duration-300 ${challengeCompleted ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-500' : 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-500'}`}>
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${challengeCompleted ? 'bg-green-100' : 'bg-amber-100'}`}>
+                            {challengeCompleted ? '✅' : todayChallenge.emoji}
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <Trophy size={16} className={challengeCompleted ? 'text-green-600' : 'text-amber-600'} />
+                                <span className={`text-xs font-bold uppercase tracking-wide ${challengeCompleted ? 'text-green-600' : 'text-amber-600'}`}>
+                                    Today's Challenge
+                                </span>
+                            </div>
+                            <p className={`text-sm font-medium mt-0.5 ${challengeCompleted ? 'text-green-700 line-through' : 'text-gray-800'}`}>
+                                {todayChallenge.text}
+                            </p>
+                        </div>
+                    </div>
+                    {!challengeCompleted && (
+                        <button
+                            onClick={completeChallenge}
+                            className="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-4 py-2 rounded-xl text-xs font-bold hover:from-amber-600 hover:to-orange-600 transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5 flex items-center gap-1"
+                        >
+                            <Check size={14} /> Done!
+                        </button>
+                    )}
+                    {challengeCompleted && (
+                        <span className="text-green-600 text-xs font-bold flex items-center gap-1 bg-green-100 px-3 py-1.5 rounded-full">
+                            <Check size={14} /> Completed!
+                        </span>
+                    )}
+                </div>
+            </div>
+
+            {/* 🎯 AI Health Tip */}
+            {profile && (
+                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl shadow-md p-5 border-l-4 border-indigo-400">
+                    <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                            <Lightbulb size={20} className="text-indigo-600" />
+                        </div>
+                        <div>
+                            <span className="text-xs font-bold text-indigo-600 uppercase tracking-wide">Weekly Tip For You</span>
+                            <p className="text-sm text-gray-700 mt-1 leading-relaxed">
+                                {profile.dietPreference === 'Vegetarian' || profile.dietPreference === 'Vegan'
+                                    ? `As a ${profile.dietPreference.toLowerCase()}, boost your protein with dal, paneer, chickpeas, and quinoa. Pair with vitamin C-rich foods for better iron absorption!`
+                                    : profile.healthGoal === 'Weight Loss'
+                                        ? 'For weight loss, try replacing one meal with a protein-rich salad. Add boiled eggs, grilled chicken, and lots of greens!'
+                                        : profile.healthGoal === 'Gain Weight'
+                                            ? 'To gain healthy weight, add calorie-dense foods like peanut butter, banana shakes, and whole grain roti with ghee to your meals.'
+                                            : 'Focus on balanced meals — fill half your plate with vegetables, quarter with protein, and quarter with whole grains for optimal nutrition!'}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Create Post Form */}
             <div className="bg-white rounded-2xl shadow-md hover:shadow-lg transition-all duration-300 p-6 border-l-4 border-green-500">
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -488,7 +599,7 @@ const Post = () => {
 
                             {/* Action Buttons */}
                             <div className="flex items-center justify-between pt-4 border-t mt-4 gap-2">
-                                <div className="flex items-center space-x-4">
+                                <div className="flex items-center space-x-2 flex-wrap gap-1">
                                     <label className="cursor-pointer text-gray-600 hover:text-green-600 transition-colors duration-200 flex items-center space-x-2 bg-gray-50 hover:bg-green-50 px-3 py-2 rounded-lg">
                                         <input
                                             type="file"
@@ -498,7 +609,7 @@ const Post = () => {
                                             className="hidden"
                                         />
                                         <ImageIcon size={18} />
-                                        <span className="text-sm font-medium">Add Image</span>
+                                        <span className="text-sm font-medium">Image</span>
                                     </label>
 
                                     <button
@@ -508,8 +619,28 @@ const Post = () => {
                                             }`}
                                     >
                                         <BarChart2 size={18} />
-                                        <span className="text-sm font-medium">Create Poll</span>
+                                        <span className="text-sm font-medium">Poll</span>
                                     </button>
+
+                                    {lastScanResult && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const scanText = `🔍 I just scanned "${lastScanResult.product}" on EatiT!\n\n` +
+                                                    `📊 Verdict: ${lastScanResult.verdict || 'N/A'}\n` +
+                                                    `🔥 Calories: ${lastScanResult.basicNutrients?.calories || '?'} kcal\n` +
+                                                    `💪 Protein: ${lastScanResult.basicNutrients?.protein_g || '?'}g\n\n` +
+                                                    `${lastScanResult.productDescription || ''}\n\n#EatiT #NutritionCheck`;
+                                                setValue('text', scanText);
+                                                setValue('category', 'nutrition');
+                                                toast.success('Scan result added to your post!');
+                                            }}
+                                            className="flex items-center space-x-2 transition-colors duration-200 px-3 py-2 rounded-lg text-orange-600 bg-orange-50 hover:bg-orange-100"
+                                        >
+                                            <Camera size={18} />
+                                            <span className="text-sm font-medium">Share Scan</span>
+                                        </button>
+                                    )}
                                 </div>
 
                                 <div className="flex items-center space-x-3">
@@ -699,34 +830,61 @@ const Post = () => {
                                     </div>
                                 </div>
                             )}
+                            {/* Scan Data Card */}
+                            {post.scanData?.itemName && (
+                                <div className="mx-4 mb-3 p-4 bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl border border-orange-200">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center">
+                                            <Camera size={22} className="text-orange-600" />
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="text-sm font-semibold text-gray-800">{post.scanData.itemName}</p>
+                                            <div className="flex items-center gap-3 mt-1">
+                                                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${post.scanData.verdict === 'healthy' ? 'bg-green-100 text-green-700' : post.scanData.verdict === 'unhealthy' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                                                    {post.scanData.verdict || 'N/A'}
+                                                </span>
+                                                {post.scanData.calories > 0 && (
+                                                    <span className="text-xs text-gray-500 flex items-center gap-1">
+                                                        <Flame size={12} /> {post.scanData.calories} kcal
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
-                            <div className="flex items-center p-4 border-t border-gray-100">
+                            <div className="flex items-center justify-between p-4 border-t border-gray-100">
+                                <div className="flex items-center">
+                                    <button
+                                        onClick={() => handleLike(post._id)}
+                                        className={`flex items-center space-x-1 mr-6 ${post.isLiked ? "text-red-500" : "text-gray-500 hover:text-red-500"
+                                            } transition-colors duration-200`}
+                                    >
+                                        <Heart size={18} fill={post.isLiked ? "currentColor" : "none"} />
+                                        <span className="text-sm">{post.likes || 0}</span>
+                                    </button>
+                                    <button
+                                        onClick={() => setShowCommentBox(showCommentBox === post._id ? null : post._id)}
+                                        className="flex items-center space-x-1 mr-6 text-gray-500 hover:text-blue-500 transition-colors duration-200"
+                                    >
+                                        <MessageSquare size={18} />
+                                        <span className="text-sm">{post.comments?.length || 0}</span>
+                                    </button>
+                                    <button
+                                        onClick={() => handleShare(post._id)}
+                                        className="flex items-center space-x-1 mr-6 text-gray-500 hover:text-green-500 transition-colors duration-200"
+                                    >
+                                        <Share2 size={18} />
+                                    </button>
+                                </div>
                                 <button
-                                    onClick={() => handleLike(post._id)}
-                                    className={`flex items-center space-x-1 mr-6 ${post.isLiked ? "text-red-500" : "text-gray-500 hover:text-red-500"
-                                        } transition-colors duration-200`}
+                                    onClick={() => toggleBookmark(post._id)}
+                                    className={`transition-colors duration-200 ${bookmarkedPosts.includes(post._id) ? 'text-amber-500' : 'text-gray-400 hover:text-amber-500'}`}
+                                    title={bookmarkedPosts.includes(post._id) ? 'Remove bookmark' : 'Save for later'}
                                 >
-                                    <Heart size={18} fill={post.isLiked ? "currentColor" : "none"} />
-                                    <span className="text-sm">{post.likes || 0}</span>
+                                    {bookmarkedPosts.includes(post._id) ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
                                 </button>
-                                <button
-                                    onClick={() => setShowCommentBox(showCommentBox === post._id ? null : post._id)}
-                                    className="flex items-center space-x-1 mr-6 text-gray-500 hover:text-blue-500 transition-colors duration-200"
-                                >
-                                    <MessageSquare size={18} />
-                                    <span className="text-sm">{post.comments?.length || 0}</span>
-                                </button>
-
-                                <button
-                                    onClick={() => handleShare(post._id)}
-                                    className="flex items-center space-x-1 text-gray-500 hover:text-green-500 transition-colors duration-200"
-                                >
-                                    <Share2 size={18} />
-
-                                </button>
-
-
-
                             </div>
 
 

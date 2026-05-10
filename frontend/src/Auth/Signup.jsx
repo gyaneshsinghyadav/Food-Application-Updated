@@ -45,7 +45,13 @@ const SignUp = () => {
     if (validateForm()) {
       try {
         await signup(input);
-        navigate("/");
+        // Get the user ID from the store after signup
+        const userId = useUserStore.getState().user?._id;
+        if (userId) {
+          navigate(`/personal-details/${userId}`);
+        } else {
+          navigate("/");
+        }
       } catch (error) {
         console.error("Signup error:", error);
       }

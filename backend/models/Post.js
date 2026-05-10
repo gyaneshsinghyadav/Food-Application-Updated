@@ -24,6 +24,18 @@ const PostSchema = new mongoose.Schema({
     enum: ['all', 'health', 'nutrition', 'exercise','diet','awareness'],
     default: 'all'
   },
+  // Scan result sharing — populated when user shares a food scan
+  scanData: {
+    itemName: String,
+    category: String,
+    verdict: String,
+    calories: Number,
+    protein_g: Number,
+    fat_g: Number,
+    carbs_g: Number,
+    imageUrl: String,
+    description: String,
+  },
   likes: { type: Number, default: 0 },
   shares: { type: Number, default: 0 },
   comments: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Comment' }],
