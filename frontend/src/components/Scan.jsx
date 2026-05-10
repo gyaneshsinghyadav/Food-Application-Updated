@@ -56,6 +56,17 @@ const CATEGORY_META = {
   },
 };
 
+// ─── Safe text extractor (AI may return string OR object) ──────────────────
+function toDisplayString(val) {
+  if (!val) return '';
+  if (typeof val === 'string') return val;
+  if (typeof val === 'object') {
+    const parts = Object.values(val).filter(v => typeof v === 'string' && v.length > 0);
+    return parts.join(' — ') || JSON.stringify(val);
+  }
+  return String(val);
+}
+
 // ─── Graceful rejection card ───────────────────────────────────────────────
 function RejectionCard({ message, suggestion }) {
   return (
@@ -407,7 +418,7 @@ function Scan() {
                     <div className="mt-3 flex flex-wrap gap-2">
                       <span className="text-xs text-slate-500 font-medium self-center">Suitable for:</span>
                       {result.analysis.suitableForSkinTypes.map((s, i) => {
-                        const text = typeof s === 'object' && s !== null ? s.name || s.type || Object.values(s)[0] : s;
+                        const text = toDisplayString(s);
                         return (
                           <span key={i} className="text-xs px-2.5 py-1 rounded-full bg-pink-500/10 border border-pink-500/20 text-pink-300">
                             {text}
@@ -423,7 +434,7 @@ function Scan() {
                       <span className="text-xs text-slate-500 font-medium block mb-1.5">Active Ingredients:</span>
                       <div className="flex flex-wrap gap-2">
                         {result.analysis.activeIngredients.map((ing, i) => {
-                          const text = typeof ing === 'object' && ing !== null ? ing.name || Object.values(ing)[0] : ing;
+                          const text = toDisplayString(ing);
                           return (
                             <span key={i} className="text-xs px-2.5 py-1 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-300">
                               {text}
@@ -442,7 +453,7 @@ function Scan() {
                           <span className="text-xs text-red-400 font-semibold block mb-1.5">⚠ Allergens:</span>
                           <div className="flex flex-wrap gap-2">
                             {result.analysis.allergens.map((a, i) => {
-                              const text = typeof a === 'object' && a !== null ? a.name || Object.values(a)[0] : a;
+                              const text = toDisplayString(a);
                               return (
                                 <span key={i} className="text-xs px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-300">
                                   {text}
@@ -457,7 +468,7 @@ function Scan() {
                           <span className="text-xs text-amber-400 font-semibold block mb-1.5">Additives / Preservatives:</span>
                           <div className="flex flex-wrap gap-2">
                             {result.analysis.additives.map((a, i) => {
-                              const text = typeof a === 'object' && a !== null ? a.name || Object.values(a)[0] : a;
+                              const text = toDisplayString(a);
                               return (
                                 <span key={i} className="text-xs px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300">
                                   {text}
@@ -508,7 +519,7 @@ function Scan() {
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {result.analysis.alternatives.map((alt, i) => {
-                        const text = typeof alt === 'object' && alt !== null ? alt.name || alt.product || alt.description || Object.values(alt)[0] : alt;
+                        const text = toDisplayString(alt);
                         return (
                           <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300">
                             <span className="text-emerald-400">→</span> {text}

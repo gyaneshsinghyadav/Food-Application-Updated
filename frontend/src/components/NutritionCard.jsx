@@ -67,7 +67,7 @@ function BulletList({ title, items, bulletColor = 'text-emerald-500', icon: Icon
       </h3>
       <ul className="space-y-1.5">
         {items.map((item, i) => {
-          const text = typeof item === 'object' && item !== null ? item.name || item.description || Object.values(item)[0] : item;
+          const text = toDisplayString(item);
           return (
             <li key={i} className="text-sm text-slate-300 flex items-start gap-2">
               <span className={`${bulletColor} mt-1`}>•</span> {text}
@@ -87,7 +87,7 @@ function TagRow({ title, tags, tagStyle }) {
       <h4 className="text-xs text-slate-500 font-semibold mb-1.5">{title}</h4>
       <div className="flex flex-wrap gap-2">
         {tags.map((t, i) => {
-          const text = typeof t === 'object' && t !== null ? t.name || t.type || Object.values(t)[0] : t;
+          const text = toDisplayString(t);
           return (
             <span key={i} className={`text-xs px-2.5 py-1 rounded-full ${tagStyle}`}>{text}</span>
           );
@@ -247,7 +247,7 @@ const NutritionCard = ({ info, category }) => {
               </h3>
               <ul className="space-y-2">
                 {info.personalWarnings.map((warning, i) => {
-                  const text = typeof warning === 'object' && warning !== null ? warning.message || warning.warning || Object.values(warning)[0] : warning;
+                  const text = toDisplayString(warning);
                   return (
                     <li key={i} className="text-sm text-red-300 flex items-start gap-2">
                       <span className="text-red-400 mt-0.5">⚠</span> {text}
