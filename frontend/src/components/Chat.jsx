@@ -60,7 +60,7 @@ function Chat() {
       console.error('Error:', error);
       setMessages((prev) => [...prev, {
         sender: 'bot',
-        text: formatText('Sorry, I couldn\'t process that. Make sure the backend and Ollama are running.'),
+        text: formatText('Sorry, I couldn\'t process that. Please try again later or check your connection.'),
         time: formatTime(),
         isFormatted: true,
       }]);
@@ -76,7 +76,7 @@ function Chat() {
         <div className="text-center mb-6 animate-fadeInUp">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-medium mb-4">
             <Bot className="w-3.5 h-3.5" />
-            Powered by Local AI
+            Powered by AI Nutrition Assistant
           </div>
           <h1 className="text-3xl md:text-5xl font-black tracking-tight mb-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
             <span className="text-blue-400">Nutrition</span>{' '}
