@@ -30,32 +30,28 @@ const signup = async (req, res) => {
         // Hash password
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Directly create verified user to skip OTP step
-        const newUser = await User.create({
+        // Generate verification code
+        const verificationToken = generateVerificationCode();
+
+        // Save in TempUser for email verification
+        const tempUser = await TempUser.create({
             email,
             password: hashedPassword,
-            isVerified: true
+            verificationToken,
+            verificationTokenExpiresAt: Date.now() + 24 * 60 * 60 * 1000 // 24 hours
         });
 
-        // Send welcome email (optional, ignoring errors)
+        // Send verification email
         try {
-            await sendWelcomeEmail(newUser.email, newUser.fullname || "User");
+            await sendVerificationEmail(email, verificationToken);
         } catch (e) {
-            console.log("Welcome email failed but ignoring", e);
+            console.error("Verification email failed", e);
         }
-
-        generateToken(res, newUser);
-
-        const userWithoutPassword = {
-            _id: newUser._id,
-            email: newUser.email,
-            isVerified: newUser.isVerified
-        };
 
         return res.status(200).json({
             success: true,
-            message: "Account created successfully.",
-            user: userWithoutPassword
+            message: "Verification code sent to your email",
+            user: { email }
         });
 
     } catch (error) {
@@ -76,6 +72,13 @@ const login = async (req, res) => {
         const user = await User.findOne({ email });
 
         if (!user) {
+            const tempUser = await TempUser.findOne({ email });
+            if (tempUser) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Please verify your email first before logging in.",
+                });
+            }
             return res.status(400).json({
                 success: false,
                 message: "Incorrect email or password",

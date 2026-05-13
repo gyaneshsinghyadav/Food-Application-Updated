@@ -378,7 +378,7 @@ const EnterPersonalDetails = ({ isEdit = false }) => {
                           errors.fullName
                             ? "border-red-500 bg-red-50"
                             : "border-gray-300"
-                        } rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition`}
+                        } rounded-lg w-full text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition`}
                         {...register("fullName", { required: true })}
                       />
                       <UserCircle
@@ -411,7 +411,7 @@ const EnterPersonalDetails = ({ isEdit = false }) => {
                           errors.dateOfBirth
                             ? "border-red-500 bg-red-50"
                             : "border-gray-300"
-                        } rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition`}
+                        } rounded-lg w-full text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition`}
                         {...register("dateOfBirth", { required: true })}
                       />
                       <Calendar
@@ -442,7 +442,7 @@ const EnterPersonalDetails = ({ isEdit = false }) => {
                         errors.gender
                           ? "border-red-500 bg-red-50"
                           : "border-gray-300"
-                      } rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition`}
+                      } rounded-lg w-full text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition`}
                       {...register("gender", { required: true })}
                     >
                       <option>Male</option>
@@ -477,7 +477,7 @@ const EnterPersonalDetails = ({ isEdit = false }) => {
                           errors.heightCm
                             ? "border-red-500 bg-red-50"
                             : "border-gray-300"
-                        } rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition`}
+                        } rounded-lg w-full text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition`}
                         {...register("heightCm", {
                           required: true,
                           min: 30,
@@ -523,7 +523,7 @@ const EnterPersonalDetails = ({ isEdit = false }) => {
                           errors.weightKg
                             ? "border-red-500 bg-red-50"
                             : "border-gray-300"
-                        } rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition`}
+                        } rounded-lg w-full text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition`}
                         {...register("weightKg", {
                           required: true,
                           min: 1,
@@ -608,7 +608,7 @@ const EnterPersonalDetails = ({ isEdit = false }) => {
                           onChange={() => handleCheckboxChange("purposes", p)}
                           className="text-blue-600 rounded focus:ring-blue-500"
                         />
-                        <span className="text-sm">{p}</span>
+                        <span className="text-sm text-gray-800">{p}</span>
                       </label>
                     ))}
                   </div>
@@ -635,7 +635,7 @@ const EnterPersonalDetails = ({ isEdit = false }) => {
                           onChange={() => handleCheckboxChange("allergies", a)}
                           className="text-blue-600 rounded focus:ring-blue-500"
                         />
-                        <span className="text-sm">{a}</span>
+                        <span className="text-sm text-gray-800">{a}</span>
                       </label>
                     ))}
                   </div>
@@ -668,7 +668,7 @@ const EnterPersonalDetails = ({ isEdit = false }) => {
                           onChange={() => handleCheckboxChange("diseases", d)}
                           className="text-blue-600 rounded focus:ring-blue-500"
                         />
-                        <span className="text-sm">{d}</span>
+                        <span className="text-sm text-gray-800">{d}</span>
                       </label>
                     ))}
                   </div>
@@ -695,7 +695,7 @@ const EnterPersonalDetails = ({ isEdit = false }) => {
                         errors.otherDisease
                           ? "border-red-500 bg-red-50"
                           : "border-gray-300"
-                      } rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition`}
+                      } rounded-lg w-full text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition`}
                       {...register("otherDisease", {
                         required: diseases.includes("Other"),
                       })}
@@ -749,7 +749,7 @@ const EnterPersonalDetails = ({ isEdit = false }) => {
                         errors.healthGoal
                           ? "border-red-500 bg-red-50"
                           : "border-gray-300"
-                      } rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition`}
+                      } rounded-lg w-full text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition`}
                       {...register("healthGoal", { required: true })}
                     >
                       {healthGoalOptions.map((goal) => (
@@ -777,7 +777,7 @@ const EnterPersonalDetails = ({ isEdit = false }) => {
                         errors.dietPreference
                           ? "border-red-500 bg-red-50"
                           : "border-gray-300"
-                      } rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition`}
+                      } rounded-lg w-full text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition`}
                       {...register("dietPreference", { required: true })}
                     >
                       {dietPreferenceOptions.map((diet) => (

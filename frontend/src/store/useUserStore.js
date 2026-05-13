@@ -23,7 +23,8 @@ export const useUserStore = create(
           });
           if (response.data.success) {
             toast.success(response.data.message);
-            set({ loading: false, user: response.data.user, isAuthenticated: true });
+            // Just set loading to false and user email (without authenticating yet)
+            set({ loading: false, user: response.data.user });
           } else {
             set({ loading: false }); // ✅ Ensure loading is set to false
             throw new Error(response.data.message);
@@ -84,8 +85,9 @@ export const useUserStore = create(
             return response.data.user
           }
         } catch (error) {
-          toast.success(error.response.data.message);
+          toast.error(error.response?.data?.message || "Invalid verification code");
           set({ loading: false });
+          throw error;
         }
       },
       checkAuthentication: async () => {
