@@ -1,5 +1,6 @@
 const User = require("../models/UserInformation");
 const { analyzeHealthReport } = require("./Analysis-Data.js");
+const { uploadOnCloudinary } = require("../utils/cloudinary");
 
 const EnterPersonaldetails = async (req, res) => {
   try {
@@ -32,14 +33,6 @@ const EnterPersonaldetails = async (req, res) => {
     if (!dietPreference) missingFields.push("Diet Preference");
 
     let imageData = null;
-    if (imageLocalPath && req.file?.filename) {
-      const fileName = req.file.filename;
-      const baseUrl = process.env.BACKEND_URL || "http://localhost:3000";
-      imageData = {
-        url: `${baseUrl}/uploads/${fileName}`,
-        publicId: fileName
-      };
-    }
 
     if (missingFields.length > 0) {
       return res.status(200).json({
@@ -74,7 +67,7 @@ const EnterPersonaldetails = async (req, res) => {
     if (imageData) PersonalData.image = imageData;
 
     // OCR health report from uploaded image (non-blocking — don't crash profile creation if OCR fails)
-    if (imageData && imageLocalPath) {
+    if (imageLocalPath) {
       try {
         console.log('[EnterPersonaldetails] Running health report OCR...');
         const healthReport = await analyzeHealthReport(imageLocalPath);
@@ -92,6 +85,16 @@ const EnterPersonaldetails = async (req, res) => {
       } catch (ocrError) {
         console.warn('[EnterPersonaldetails] Health report OCR failed (non-critical):', ocrError.message);
         // Continue without health report — profile creation should still succeed
+      }
+      
+      // Upload to Cloudinary AFTER OCR (because uploadOnCloudinary deletes the local file)
+      const cloudResponse = await uploadOnCloudinary(imageLocalPath);
+      if (cloudResponse) {
+        imageData = {
+          url: cloudResponse.secure_url,
+          publicId: cloudResponse.public_id
+        };
+        PersonalData.image = imageData;
       }
     }
 
@@ -188,10 +191,10 @@ const uploadHealthReport = async (req, res) => {
       });
     }
 
-    // Save image URL
-    const fileName = req.file.filename;
-    const baseUrl = process.env.BACKEND_URL || "http://localhost:3000";
-    const imageUrl = `${baseUrl}/uploads/${fileName}`;
+    // Upload image to Cloudinary AFTER OCR
+    const cloudResponse = await uploadOnCloudinary(imagePath);
+    const imageUrl = cloudResponse ? cloudResponse.secure_url : "";
+    const publicId = cloudResponse ? cloudResponse.public_id : "";
 
     // Update user's health report
     const updatedUser = await User.findOneAndUpdate(
@@ -199,7 +202,7 @@ const uploadHealthReport = async (req, res) => {
       {
         healthReport,
         documents: healthReport.rawSummary || '',
-        image: { url: imageUrl, publicId: fileName },
+        ...(cloudResponse && { image: { url: imageUrl, publicId: publicId } })
       },
       { new: true }
     );
